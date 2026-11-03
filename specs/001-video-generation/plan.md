@@ -168,6 +168,10 @@ model weights — a fundamentally different runtime and deploy cadence from the
 lightweight FastAPI backend/RQ worker. `infra/` centralizes the Docker Compose
 and Caddy configuration shared across the deployable services.
 
+## Known Risks
+
+- **`WORDS_PER_5S_MAX` (words-per-5-seconds narration limit, `backend/app/services/llm_service.py`) is an uncalibrated estimate.** It was set without a real TTS voice to measure against — Phase 3's User Story 1 runs entirely in `VIDEO_PROVIDER=mock`. This constant drives the `wordLimit` shown to students and the hard gate enforced on `POST /videos`. If it's wrong, every real (`VIDEO_PROVIDER=runpod`) job fails systematically: too generous and OmniVoice's real narration will routinely exceed the 10% `atempo` speedup budget, landing jobs in `SCRIPT_TOO_LONG`; too strict and scripts are needlessly short. **Must be re-measured against real OmniVoice output during Phase 7** before relying on it in production — see research.md A9's calibration warning for the measurement approach.
+
 ## Complexity Tracking
 
 > **Fill ONLY if Constitution Check has violations that must be justified**

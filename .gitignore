@@ -20,6 +20,9 @@ venv/
 .data/
 *.log
 
+# --- Local-only source media (never commit; mock assets are derived from this) ---
+sample-media/
+
 # --- Env files (never commit secrets) ---
 .env
 .env.local

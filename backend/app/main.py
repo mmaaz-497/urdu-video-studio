@@ -6,11 +6,15 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
+from app.api.scripts import router as scripts_router
+from app.api.videos import router as videos_router
+from app.api.voices import router as voices_router
 from app.core.config import get_settings
 from app.core.db import connect_with_retry
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger, request_id_var
 from app.core.redis_client import close_redis
+from app.services.mock_provider import ASSETS_DIR
 from app.services.storage_local import STATIC_MOUNT_PATH
 
 logger = get_logger(__name__)
@@ -51,7 +55,12 @@ if settings.STORAGE_PROVIDER == "local":
     Path(settings.LOCAL_STORAGE_PATH).mkdir(parents=True, exist_ok=True)
     app.mount(STATIC_MOUNT_PATH, StaticFiles(directory=settings.LOCAL_STORAGE_PATH), name="static")
 
+app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
 app.include_router(auth_router)
+app.include_router(scripts_router)
+app.include_router(voices_router)
+app.include_router(videos_router)
 
 
 @app.get("/health")

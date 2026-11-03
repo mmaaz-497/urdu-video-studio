@@ -218,6 +218,22 @@ are business rules this spec treats as hard gates (FR-010, FR-017), not just LLM
 formatting concerns, so the backend re-checks them independently of whatever the
 model claims.
 
+> **⚠️ Calibration warning — `WORDS_PER_5S_MAX` (`backend/app/services/llm_service.py`)**:
+> the "~13-15 words per 5s" ceiling is an *estimate* of Urdu speaking rate,
+> chosen without a real TTS voice to measure against (Phase 3 ran entirely in
+> `VIDEO_PROVIDER=mock`, where narration is a bundled placeholder clip, not
+> synthesized from the script). It directly sets `wordLimit` (shown to the
+> student, enforced as a hard gate on `POST /videos`) and is the number the
+> LLM is prompted to stay under. **If this constant is wrong, every real job
+> fails**: too generous and OmniVoice's actual narration will routinely need
+> more than the 10% `atempo` speedup FFmpeg allows (A6), landing every job in
+> `SCRIPT_TOO_LONG`; too strict and students get needlessly short scripts.
+> **Before/during Phase 7** (first real OmniVoice integration), this constant
+> MUST be re-measured against real narration audio — synthesize a range of
+> word counts per voice, record actual seconds-per-word, and update
+> `WORDS_PER_5S_MAX` (and re-derive `WORD_TARGET_RATIO`'s target) from that
+> measurement rather than the current estimate.
+
 ### A10. Polling vs. WebSockets for progress updates
 
 **Decision**: TanStack Query `refetchInterval: 3000` against `GET

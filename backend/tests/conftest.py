@@ -58,3 +58,14 @@ def student_factory(db_session: Session):
         return student
 
     return _create
+
+
+@pytest.fixture
+def auth_client(client: TestClient, student_factory):
+    """A logged-in TestClient plus the X-CSRF-Token header required for any
+    state-changing request, and the logged-in Student row."""
+    student = student_factory(password="password123")
+    resp = client.post("/auth/login", json={"email": student.email, "password": "password123"})
+    assert resp.status_code == 200
+    csrf_token = client.cookies.get("csrf_token")
+    return client, {"X-CSRF-Token": csrf_token}, student

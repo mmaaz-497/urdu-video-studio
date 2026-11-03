@@ -52,11 +52,20 @@ def get_usage_summary(db: Session, student_id: uuid.UUID) -> dict:
     }
 
 
-def increment_script_count(db: Session, student_id: uuid.UUID) -> None:
-    """Unconditionally increments under the day's row lock. Caller enforces DAILY_SCRIPT_LIMIT."""
+def resets_at() -> datetime:
+    return _resets_at()
+
+
+def try_increment_script_count(db: Session, student_id: uuid.UUID) -> bool:
+    """Atomically claims one script-generation slot for today. Returns False
+    if DAILY_SCRIPT_LIMIT is already reached."""
+    settings = get_settings()
     counter = _get_or_create_counter(db, student_id, for_update=True)
+    if counter.script_count >= settings.DAILY_SCRIPT_LIMIT:
+        return False
     counter.script_count += 1
     db.flush()
+    return True
 
 
 def try_increment_video_count(db: Session, student_id: uuid.UUID) -> bool:
