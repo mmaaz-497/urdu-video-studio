@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens from specs/001-video-generation/design-system.md.
+ * Dark is the default theme; light is a fully-designed peer, not a fallback.
+ * Color values are HSL triplets (no `hsl()` wrapper) so Tailwind's
+ * `hsl(var(--token))` color config works; gradient tokens stay as raw hex
+ * since they're consumed directly in `linear-gradient()`, not through the
+ * color palette.
+ */
+@layer base {
+  :root {
+    /* Typography — mobile-first; md: breakpoint below swaps to desktop sizes */
+    --text-display: 2rem;
+    --leading-display: 2.5rem;
+    --text-h1: 1.5rem;
+    --leading-h1: 2rem;
+    --text-h2: 1.5rem;
+    --leading-h2: 2rem;
+    --text-h3: 1.125rem;
+    --leading-h3: 1.75rem;
+    --text-body: 1rem;
+    --leading-body: 1.5rem;
+    --text-body-sm: 0.875rem;
+    --leading-body-sm: 1.25rem;
+    --text-urdu: 1.125rem;
+    --leading-urdu: 2.25rem;
+
+    /* Radius */
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1.25rem;
+
+    /* Dark (default) */
+    --background: 240 20% 5%;
+    --surface: 240 16% 10%;
+    --surface-raised: 240 15% 14%;
+    --foreground: 240 10% 96%;
+    --muted-foreground: 240 7% 63%;
+    --border: 240 13% 19%;
+    --primary: 252 100% 68%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 15% 14%;
+    --secondary-foreground: 240 10% 96%;
+    --accent: 240 15% 14%;
+    --accent-foreground: 240 10% 96%;
+    --success: 147 66% 51%;
+    --warning: 37 91% 55%;
+    --destructive: 359 90% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 252 100% 68%;
+    --input: 240 13% 19%;
+
+    --gradient-from: #7c5cff;
+    --gradient-to: #00d1c7;
+
+    --shadow-raised: 0 0 0 1px hsl(var(--border)), 0 8px 24px -8px rgb(124 92 255 / 0.25);
+  }
+
+  @media (min-width: 768px) {
+    :root {
+      --text-display: 3rem;
+      --leading-display: 3.5rem;
+      --text-h1: 2rem;
+      --leading-h1: 2.5rem;
+      --text-urdu: 1.25rem;
+      --leading-urdu: 2.5rem;
+    }
+  }
+
+  .light {
+    --background: 0 0% 100%;
+    --surface: 240 33% 98%;
+    --surface-raised: 0 0% 100%;
+    --foreground: 240 16% 9%;
+    --muted-foreground: 240 6% 41%;
+    --border: 240 20% 91%;
+    --primary: 254 87% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 33% 98%;
+    --secondary-foreground: 240 16% 9%;
+    --accent: 240 33% 98%;
+    --accent-foreground: 240 16% 9%;
+    --success: 147 70% 32%;
+    --warning: 36 90% 37%;
+    --destructive: 358 63% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 254 87% 60%;
+    --input: 240 20% 91%;
+
+    --gradient-from: #6a42f2;
+    --gradient-to: #00a89f;
+
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -8px rgb(0 0 0 / 0.08);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-body text-foreground;
+  }
+}
+
+@layer utilities {
+  /* RTL-aware Urdu script text — proper line-height for Nastaliq's vertical
+     stacking and real `dir="rtl"` (not just text-align) for correct
+     cursor/selection behavior in editable fields. */
+  .urdu {
+    direction: rtl;
+    font-family: var(--font-urdu), serif;
+    font-size: var(--text-urdu);
+    line-height: var(--leading-urdu);
+  }
+
+  .shadow-raised {
+    box-shadow: var(--shadow-raised);
+  }
+
+  .bg-accent-gradient {
+    background-image: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
+  }
+
+  .text-accent-gradient {
+    background-image: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

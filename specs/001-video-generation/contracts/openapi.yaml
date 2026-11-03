@@ -1,0 +1,448 @@
+openapi: 3.0.3
+info:
+  title: Urdu Video Studio API
+  version: "1.0.0"
+  description: >
+    API for the Student Video Generation feature (001-video-generation).
+    Single role: student. Sessions are an httpOnly, Secure cookie
+    (`session_id`), not a bearer token — endpoints marked "requires session"
+    expect that cookie.
+servers:
+  - url: /api
+
+tags:
+  - name: auth
+  - name: voices
+  - name: scripts
+  - name: videos
+  - name: usage
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Self-register a new student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Account created, session cookie set
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StudentProfile' }
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Validation error (bad email, weak password)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in with email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Logged in, session cookie set
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StudentProfile' }
+        '401':
+          description: Invalid email or password (generic message, no hinting)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out (clears server-side session)
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: Logged out }
+
+  /auth/forgot-password:
+    post:
+      tags: [auth]
+      summary: Request a password-reset email
+      description: >
+        Always responds 202 regardless of whether the email is registered,
+        to avoid revealing account existence (FR-003).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202': { description: Reset email sent if the account exists }
+
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      summary: Set a new password using a reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        '200': { description: Password updated }
+        '400':
+          description: Token invalid, expired, already used, or superseded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Password does not meet minimum requirements
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /me:
+    get:
+      tags: [usage]
+      summary: Current student profile + today's usage against both daily limits
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StudentProfile' }
+        '401':
+          description: Not logged in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /voices:
+    get:
+      tags: [voices]
+      summary: List the two preset voices with preview samples
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Voice' }
+
+  /scripts:
+    post:
+      tags: [scripts]
+      summary: >
+        Generate (or regenerate) a corrected idea, Urdu narration script, and
+        scene breakdown for the chosen duration. Stateless — the result is
+        held client-side until approval (see modeling note in data-model.md).
+        Counts toward DAILY_SCRIPT_LIMIT, including unsafe-content rejections
+        and parse failures. Idempotent on (student, idempotencyKey): the key
+        is atomically claimed server-side before any work starts, so a
+        request that arrives while an identical key is still being processed
+        gets 425 (not re-counted), and a retried/double-clicked request with
+        a key whose result is already cached (60s TTL) returns the original
+        result and is not re-counted against DAILY_SCRIPT_LIMIT.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateScriptRequest' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GeneratedScript' }
+        '400':
+          description: >
+            Idea rejected as unsafe/inappropriate (error.code =
+            UNSAFE_CONTENT), or idea fails length validation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Daily script-generation limit reached (error.code = DAILY_SCRIPT_LIMIT_REACHED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '425':
+          description: >
+            A request with this idempotencyKey is already being processed
+            (error.code = REQUEST_IN_PROGRESS); not a replay — wait and retry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: LLM generation failed after one retry (error.code = SCRIPT_GENERATION_FAILED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /videos:
+    post:
+      tags: [videos]
+      summary: >
+        Approve and create a video job. Idempotent on (student, idempotencyKey)
+        — a retried request with the same key returns the original job, not a
+        duplicate.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVideoJobRequest' }
+      responses:
+        '201':
+          description: Job created (or the existing job, if idempotencyKey was replayed)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VideoJob' }
+        '400':
+          description: Script exceeds the word-count target for the chosen duration (error.code = SCRIPT_TOO_LONG)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Daily video limit reached (error.code = DAILY_VIDEO_LIMIT_REACHED), includes resetsAt
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [videos]
+      summary: List my videos (My Videos grid), newest first
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 24, maximum: 100 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/VideoJobSummary' }
+                  nextCursor: { type: string, nullable: true }
+
+  /videos/{id}:
+    get:
+      tags: [videos]
+      summary: Get one video job's current status/progress/result (used by 3s polling)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VideoJob' }
+        '404':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [videos]
+      summary: Delete a video (only allowed when status is ready or failed)
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Deleted }
+        '409':
+          description: Video is still processing (error.code = DELETE_WHILE_PROCESSING)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /videos/{id}/retry:
+    post:
+      tags: [videos]
+      summary: >
+        Retry a Failed video — creates a brand-new VideoJob from the same
+        approved idea/script/duration/aspect ratio/voice (counts toward the
+        daily video limit).
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VideoJob' }
+        '409':
+          description: Original job is not in a Failed state (error.code = RETRY_NOT_ALLOWED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Daily video limit reached (error.code = DAILY_VIDEO_LIMIT_REACHED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session_id
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: DAILY_VIDEO_LIMIT_REACHED }
+            message: { type: string, example: "You've used all your videos for today. Come back after midnight (Asia/Karachi) for more." }
+            requestId: { type: string, description: "Correlates to server-side logs; never a stack trace." }
+            resetsAt: { type: string, format: date-time, description: "Present for limit-reached errors." }
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    StudentProfile:
+      type: object
+      required: [id, email, usage]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        usage:
+          type: object
+          required: [videosUsedToday, videoLimit, scriptsUsedToday, scriptLimit, resetsAt]
+          properties:
+            videosUsedToday: { type: integer }
+            videoLimit: { type: integer, description: "From server config DAILY_VIDEO_LIMIT" }
+            scriptsUsedToday: { type: integer }
+            scriptLimit: { type: integer, description: "From server config DAILY_SCRIPT_LIMIT" }
+            resetsAt: { type: string, format: date-time, description: "Next midnight, Asia/Karachi" }
+
+    Voice:
+      type: object
+      required: [id, label, previewUrl]
+      properties:
+        id: { type: string, enum: [male, female] }
+        label: { type: string, example: "Male voice" }
+        previewUrl: { type: string, format: uri }
+
+    GenerateScriptRequest:
+      type: object
+      required: [idempotencyKey, idea, durationSeconds, aspectRatio, voiceId]
+      properties:
+        idempotencyKey: { type: string, format: uuid, description: "Client-generated per click (new value for each distinct Generate/Regenerate action); replays within 60s return the cached result instead of calling the LLM again" }
+        idea: { type: string, minLength: 10, maxLength: 500, description: "Roman Urdu or Urdu, spelling mistakes allowed" }
+        durationSeconds: { type: integer, enum: [5, 10, 15] }
+        aspectRatio: { type: string, enum: ['16:9', '9:16'] }
+        voiceId: { type: string, enum: [male, female] }
+
+    GeneratedScript:
+      type: object
+      required: [correctedIdea, title, urduScript, scenes, wordCount, wordLimit]
+      properties:
+        correctedIdea: { type: string }
+        title: { type: string }
+        urduScript: { type: string, description: "Right-to-left Urdu text" }
+        scenes:
+          type: array
+          items: { type: string }
+          minItems: 1
+          maxItems: 3
+          description: "English scene prompts; count = durationSeconds / 5"
+        wordCount: { type: integer, description: "Live word-counter value for the Review screen" }
+        wordLimit: { type: integer, description: "Target ceiling for the chosen duration (~13-15 words per 5s)" }
+
+    CreateVideoJobRequest:
+      type: object
+      required: [idempotencyKey, correctedIdea, title, urduScript, scenes, durationSeconds, aspectRatio, voiceId]
+      properties:
+        idempotencyKey: { type: string, format: uuid }
+        correctedIdea: { type: string }
+        title: { type: string }
+        urduScript: { type: string }
+        scenes:
+          type: array
+          items: { type: string }
+          minItems: 1
+          maxItems: 3
+        durationSeconds: { type: integer, enum: [5, 10, 15] }
+        aspectRatio: { type: string, enum: ['16:9', '9:16'] }
+        voiceId: { type: string, enum: [male, female] }
+
+    VideoJobStatus:
+      type: string
+      enum: [queued, preparing, generating_scenes, adding_voice, finalizing, ready, failed]
+
+    VideoJobSummary:
+      type: object
+      required: [id, title, status, durationSeconds, aspectRatio, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        thumbnailUrl: { type: string, format: uri, nullable: true }
+        status: { $ref: '#/components/schemas/VideoJobStatus' }
+        durationSeconds: { type: integer }
+        aspectRatio: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    VideoJob:
+      allOf:
+        - $ref: '#/components/schemas/VideoJobSummary'
+        - type: object
+          properties:
+            progressCurrentScene: { type: integer, nullable: true }
+            progressTotalScenes: { type: integer }
+            failureReason: { type: string, nullable: true, example: "Script is too long for the chosen duration — please shorten it" }
+            videoUrl: { type: string, format: uri, nullable: true, description: "Presigned R2 GET URL, set when status=ready" }
+            urduScript: { type: string }
+            correctedIdea: { type: string }
+            voiceId: { type: string, enum: [male, female] }
+            completedAt: { type: string, format: date-time, nullable: true }
