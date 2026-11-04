@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiError, apiClient } from '@/lib/api-client'
 import { clearDraft, readDraft, writeDraft, type ReviewDraft } from '@/lib/review-draft'
+import { formatResetTime, useUsage } from '@/lib/use-usage'
 import type { GeneratedScript, VideoJob } from '@/lib/types'
 
 function wordCount(text: string): number {
@@ -27,6 +28,8 @@ export default function ReviewPage() {
   const [wordLimit, setWordLimit] = useState(0)
   const [regenerating, setRegenerating] = useState(false)
   const [approving, setApproving] = useState(false)
+  const { data: profile } = useUsage()
+  const limitReached = profile ? profile.usage.videosUsedToday >= profile.usage.videoLimit : false
 
   useEffect(() => {
     const stored = readDraft()
@@ -82,7 +85,7 @@ export default function ReviewPage() {
   }
 
   async function handleApprove() {
-    if (!draft || overLimit || busy) return
+    if (!draft || overLimit || busy || limitReached) return
     setApproving(true)
     const idempotencyKey = crypto.randomUUID()
     try {
@@ -190,13 +193,20 @@ export default function ReviewPage() {
         </div>
       </section>
 
+      {limitReached && profile && (
+        <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-body text-warning">
+          You&apos;ve used all your videos for today. Come back after midnight (Asia/Karachi) —
+          resets {formatResetTime(profile.usage.resetsAt)}.
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 sm:flex-row">
         <Button variant="outline" onClick={handleRegenerate} disabled={busy} className="sm:flex-1">
           {regenerating ? 'Regenerating…' : 'Regenerate'}
         </Button>
         <Button
           onClick={handleApprove}
-          disabled={busy || overLimit}
+          disabled={busy || overLimit || limitReached}
           className="bg-accent-gradient text-white hover:opacity-90 sm:flex-1"
         >
           {approving ? 'Creating video…' : 'Approve & Create Video'}

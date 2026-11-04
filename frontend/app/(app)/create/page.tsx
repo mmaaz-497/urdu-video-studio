@@ -7,9 +7,11 @@ import { toast } from 'sonner'
 
 import { IdeaTextarea, IDEA_MAX_LENGTH, IDEA_MIN_LENGTH } from '@/components/studio/idea-textarea'
 import { AspectRatioShape, OptionCard } from '@/components/studio/option-card'
+import { UsageBadge } from '@/components/studio/usage-badge'
 import { Button } from '@/components/ui/button'
 import { ApiError, apiClient } from '@/lib/api-client'
 import { writeDraft, type ReviewDraft } from '@/lib/review-draft'
+import { formatResetTime, useUsage } from '@/lib/use-usage'
 import type { AspectRatio, DurationSeconds, GeneratedScript, Voice, VoiceId } from '@/lib/types'
 
 const DURATIONS: DurationSeconds[] = [5, 10, 15]
@@ -28,6 +30,8 @@ export default function CreatePage() {
   const [playingVoice, setPlayingVoice] = useState<VoiceId | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const { data: profile } = useUsage()
+  const limitReached = profile ? profile.usage.videosUsedToday >= profile.usage.videoLimit : false
 
   useEffect(() => {
     apiClient
@@ -60,7 +64,7 @@ export default function CreatePage() {
   }
 
   const ideaValid = idea.length >= IDEA_MIN_LENGTH && idea.length <= IDEA_MAX_LENGTH
-  const canSubmit = ideaValid && !submitting
+  const canSubmit = ideaValid && !submitting && !limitReached
 
   async function handleSubmit() {
     if (!canSubmit) return
@@ -94,12 +98,22 @@ export default function CreatePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-10">
       <div className="space-y-2">
-        <h1 className="text-h1 font-semibold">Create a video</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-h1 font-semibold">Create a video</h1>
+          <UsageBadge />
+        </div>
         <p className="text-body text-muted-foreground">
           Describe your idea, pick a style, and we&apos;ll turn it into a short Urdu script to
           review.
         </p>
       </div>
+
+      {limitReached && profile && (
+        <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-body text-warning">
+          You&apos;ve used all your videos for today. Come back after midnight (Asia/Karachi) —
+          resets {formatResetTime(profile.usage.resetsAt)}.
+        </div>
+      )}
 
       <section className="space-y-3">
         <label htmlFor="idea" className="text-h3 font-semibold">

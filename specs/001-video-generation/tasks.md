@@ -162,11 +162,11 @@ a student can go from idea to a downloadable video with zero GPU cost.
 **Independent Test**: A student with one Ready and one Failed job opens "My
 Videos," manages both, and sees their remaining daily quota on the Create page.
 
-- [ ] T061 [US2] `backend/app/services/video_job_service.py` — extend with `list_for_student(student_id, cursor, limit)`, `delete(job_id)` (only if `status` is `ready`/`failed`, else `AppError("DELETE_WHILE_PROCESSING")`), `retry(job_id)` (`AppError("RETRY_NOT_ALLOWED")` unless `failed`; otherwise creates a new job via `create_job` reusing the approved idea/script/duration/aspect-ratio/voice) (FR-019, FR-021, FR-022) — depends on T043
-- [ ] T062 [US2] `backend/app/api/videos.py` — extend with `GET /videos` (list, cursor-paginated), `DELETE /videos/{id}`, `POST /videos/{id}/retry` (FR-019, FR-020, FR-021, FR-022) — depends on T061, T045
-- [ ] T063 [P] [US2] `frontend/components/studio/usage-badge.tsx` — "X of Y videos left today" (reads `GET /me`'s `usage`); mounted into T056's Create page (FR-024) — depends on T032
-- [ ] T064 [P] [US2] `frontend/components/studio/video-card.tsx` — thumbnail with hover-autoplay preview, status badge, title/date/duration/aspect-ratio, play/download/delete/retry actions (FR-019, FR-020, FR-021, FR-022)
-- [ ] T065 [US2] `frontend/app/(app)/videos/page.tsx` — "My Videos" grid using T064, calling T062's list/delete/retry endpoints, friendly failure-reason display (FR-019, FR-021, FR-022, FR-033); verify mobile-first, no horizontal scroll at 375px width (FR-031) — depends on T064, T032
+- [X] T061 [US2] `backend/app/services/video_job_service.py` — extend with `list_for_student(student_id, cursor, limit)`, `delete(job_id)` (only if `status` is `ready`/`failed`, else `AppError("DELETE_WHILE_PROCESSING")`), `retry(job_id)` (`AppError("RETRY_NOT_ALLOWED")` unless `failed`; otherwise creates a new job via `create_job` reusing the approved idea/script/duration/aspect-ratio/voice) (FR-019, FR-021, FR-022) — depends on T043
+- [X] T062 [US2] `backend/app/api/videos.py` — extend with `GET /videos` (list, cursor-paginated), `DELETE /videos/{id}`, `POST /videos/{id}/retry` (FR-019, FR-020, FR-021, FR-022) — depends on T061, T045
+- [X] T063 [P] [US2] `frontend/components/studio/usage-badge.tsx` — "X of Y videos left today" (reads `GET /me`'s `usage`); mounted into T056's Create page (FR-024) — depends on T032
+- [X] T064 [P] [US2] `frontend/components/studio/video-card.tsx` — thumbnail with hover-autoplay preview, status badge, title/date/duration/aspect-ratio, play/download/delete/retry actions (FR-019, FR-020, FR-021, FR-022)
+- [X] T065 [US2] `frontend/app/(app)/videos/page.tsx` — "My Videos" grid using T064, calling T062's list/delete/retry endpoints, friendly failure-reason display (FR-019, FR-021, FR-022, FR-033); verify mobile-first, no horizontal scroll at 375px width (FR-031) — depends on T064, T032
 
 **Checkpoint**: User Stories 1 + 2 both independently functional.
 

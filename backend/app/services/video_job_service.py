@@ -1,7 +1,8 @@
+import base64
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
@@ -10,6 +11,7 @@ from app.schemas.videos import CreateVideoJobRequest
 from app.services import llm_service, usage_service
 
 _TERMINAL_STATUSES = ("ready", "failed")
+_DEFAULT_PAGE_SIZE = 20
 
 
 def create_job(
@@ -70,6 +72,69 @@ def create_job(
 
 def get_job(db: Session, job_id: uuid.UUID) -> VideoJob | None:
     return db.get(VideoJob, job_id)
+
+
+def _encode_cursor(job: VideoJob) -> str:
+    raw = f"{job.created_at.isoformat()}|{job.id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+        created_at_str, id_str = raw.split("|", 1)
+        return datetime.fromisoformat(created_at_str), uuid.UUID(id_str)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise AppError("VALIDATION_ERROR", "Invalid pagination cursor.") from exc
+
+
+def list_for_student(
+    db: Session, student_id: uuid.UUID, cursor: str | None = None, limit: int = _DEFAULT_PAGE_SIZE
+) -> tuple[list[VideoJob], str | None]:
+    """Newest-first, cursor-paginated. Returns (jobs, nextCursor) where
+    `nextCursor` is None once there are no more pages."""
+    stmt = select(VideoJob).where(VideoJob.student_id == student_id)
+    if cursor:
+        cursor_created_at, cursor_id = _decode_cursor(cursor)
+        stmt = stmt.where(
+            or_(
+                VideoJob.created_at < cursor_created_at,
+                and_(VideoJob.created_at == cursor_created_at, VideoJob.id < cursor_id),
+            )
+        )
+    stmt = stmt.order_by(VideoJob.created_at.desc(), VideoJob.id.desc()).limit(limit + 1)
+    jobs = list(db.execute(stmt).scalars().all())
+    has_more = len(jobs) > limit
+    jobs = jobs[:limit]
+    next_cursor = _encode_cursor(jobs[-1]) if has_more and jobs else None
+    return jobs, next_cursor
+
+
+def delete(db: Session, job: VideoJob) -> None:
+    if job.status not in _TERMINAL_STATUSES:
+        raise AppError(
+            "DELETE_WHILE_PROCESSING",
+            "This video is still being created — please wait until it's ready or failed "
+            "before deleting it.",
+        )
+    db.delete(job)
+    db.commit()
+
+
+def retry(db: Session, job: VideoJob) -> tuple[VideoJob, bool]:
+    if job.status != "failed":
+        raise AppError("RETRY_NOT_ALLOWED", "Only failed videos can be retried.")
+    payload = CreateVideoJobRequest(
+        idempotencyKey=uuid.uuid4(),
+        correctedIdea=job.corrected_idea,
+        title=job.title,
+        urduScript=job.urdu_script,
+        scenes=job.scenes,
+        durationSeconds=job.duration_seconds,
+        aspectRatio=job.aspect_ratio,
+        voiceId=job.voice_id,
+    )
+    return create_job(db, job.student_id, payload)
 
 
 def mark_status(db: Session, job_id: uuid.UUID, status: str, **fields) -> VideoJob | None:

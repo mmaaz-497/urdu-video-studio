@@ -61,3 +61,13 @@ export interface VideoJob extends VideoJobSummary {
   voiceId: VoiceId
   completedAt: string | null
 }
+
+export interface VideoJobListItem extends VideoJobSummary {
+  failureReason: string | null
+  videoUrl: string | null
+}
+
+export interface VideoJobListResponse {
+  items: VideoJobListItem[]
+  nextCursor: string | null
+}

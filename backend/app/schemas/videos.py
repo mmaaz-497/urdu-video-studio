@@ -39,3 +39,13 @@ class VideoJob(VideoJobSummary):
     correctedIdea: str
     voiceId: Literal["male", "female"]
     completedAt: datetime | None = None
+
+
+class VideoJobListItem(VideoJobSummary):
+    failureReason: str | None = None
+    videoUrl: str | None = None
+
+
+class VideoJobListResponse(BaseModel):
+    items: list[VideoJobListItem]
+    nextCursor: str | None = None
