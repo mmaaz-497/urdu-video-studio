@@ -179,13 +179,13 @@ Videos," manages both, and sees their remaining daily quota on the Create page.
 **Independent Test**: An existing student requests a reset, receives the
 email, follows the link, sets a new password, and logs in with it.
 
-- [ ] T066 [US3] `backend/app/services/email_service.py` — `EmailSender` protocol + `ResendEmailSender` (resend.com REST API); 10s timeout + 2 retries + friendly `AppError("EMAIL_SEND_FAILED")` on exhaustion (research.md A2, FR-003)
-- [ ] T067 [US3] `backend/app/services/password_reset_service.py` — `create_token(student)` (invalidates any outstanding token for that student first, stores only a SHA-256 hash, 30-minute expiry), `verify_token(raw_token)`, `consume_token(raw_token, new_password)` (FR-003, FR-004) — depends on T013, T019
-- [ ] T068 [US3] `backend/app/schemas/auth.py` — extend with `ForgotPasswordRequest`/`ResetPasswordRequest` schemas
-- [ ] T069 [US3] `backend/app/api/auth.py` — extend with `POST /auth/forgot-password` (always `202`, never reveals account existence; calls T066 + T067) and `POST /auth/reset-password` (FR-003, FR-004) — depends on T067, T068, T066
-- [ ] T070 [US3] `backend/tests/test_auth.py` — extend with password-reset coverage: issue/consume, expired token, already-used token, superseded-by-newer-token (completes critical path #1) — depends on T069
-- [ ] T071 [P] [US3] `frontend/app/(auth)/forgot-password/page.tsx` — email form → `POST /auth/forgot-password`; always shows a generic "check your email" confirmation; verify mobile-first, no horizontal scroll at 375px width (FR-031) — depends on T032
-- [ ] T072 [P] [US3] `frontend/app/(auth)/reset-password/page.tsx` — new-password form (token read from the URL query) → `POST /auth/reset-password`; friendly expired/used-link message linking back to forgot-password; verify mobile-first, no horizontal scroll at 375px width (FR-031) — depends on T032
+- [X] T066 [US3] `backend/app/services/email_service.py` — `EmailSender` protocol + `ResendEmailSender` (resend.com REST API); 10s timeout + 2 retries + friendly `AppError("EMAIL_SEND_FAILED")` on exhaustion (research.md A2, FR-003)
+- [X] T067 [US3] `backend/app/services/password_reset_service.py` — `create_token(student)` (invalidates any outstanding token for that student first, stores only a SHA-256 hash, 30-minute expiry), `verify_token(raw_token)`, `consume_token(raw_token, new_password)` (FR-003, FR-004) — depends on T013, T019
+- [X] T068 [US3] `backend/app/schemas/auth.py` — extend with `ForgotPasswordRequest`/`ResetPasswordRequest` schemas
+- [X] T069 [US3] `backend/app/api/auth.py` — extend with `POST /auth/forgot-password` (always `202`, never reveals account existence; calls T066 + T067) and `POST /auth/reset-password` (FR-003, FR-004) — depends on T067, T068, T066
+- [X] T070 [US3] `backend/tests/test_auth.py` — extend with password-reset coverage: issue/consume, expired token, already-used token, superseded-by-newer-token (completes critical path #1) — depends on T069
+- [X] T071 [P] [US3] `frontend/app/(auth)/forgot-password/page.tsx` — email form → `POST /auth/forgot-password`; always shows a generic "check your email" confirmation; verify mobile-first, no horizontal scroll at 375px width (FR-031) — depends on T032
+- [X] T072 [P] [US3] `frontend/app/(auth)/reset-password/page.tsx` — new-password form (token read from the URL query) → `POST /auth/reset-password`; friendly expired/used-link message linking back to forgot-password; verify mobile-first, no horizontal scroll at 375px width (FR-031) — depends on T032
 
 **Checkpoint**: User Stories 1 + 2 + 3 all independently functional.
 

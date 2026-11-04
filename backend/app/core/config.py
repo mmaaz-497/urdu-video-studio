@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     # Email (Resend)
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "no-reply@example.com"
+    # Public origin of the frontend; used to build password-reset links.
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
 
     # Session / CSRF
     SESSION_COOKIE_SECRET: str

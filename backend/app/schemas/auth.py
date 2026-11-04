@@ -27,3 +27,12 @@ class StudentProfile(BaseModel):
     email: str
     createdAt: datetime
     usage: UsageSummary
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1)
+    newPassword: str = Field(min_length=8)
