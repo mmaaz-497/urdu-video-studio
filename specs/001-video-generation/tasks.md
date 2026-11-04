@@ -199,15 +199,15 @@ showcase, and FAQ.
 **Independent Test**: An anonymous visitor views the hero/steps/showcase/FAQ,
 toggles the theme (persists across reload), and clicks through to sign-up.
 
-- [ ] T073 [US4] Verify `frontend/components/layout/theme-toggle.tsx` (built in Foundational, T033b) renders and persists correctly for an anonymous visitor on the public routes — no new component; this is reuse, not creation (FR-030)
-- [ ] T074 [US4] `frontend/app/(public)/layout.tsx` — mounts T033c's site-header, reused as-is (it already renders the anonymous "Login"/"Start Creating" + theme-toggle variant for a visitor with no session) around every `(public)/*` route — depends on T033c
-- [ ] T075 [P] [US4] `frontend/components/marketing/hero.tsx` — autoplaying muted sample video, headline, "Start Creating" CTA → `/register` (FR-029)
-- [ ] T076 [P] [US4] `frontend/components/marketing/how-it-works.tsx` — 3-step explanation: Write idea → Review script → Get video (FR-029)
-- [ ] T077 [P] [US4] `frontend/components/marketing/showcase-grid.tsx` — sample-video grid, hover-autoplay (same visual language as T064's Video Card) (FR-029)
-- [ ] T078 [P] [US4] `frontend/components/marketing/faq-accordion.tsx` — FAQ section (shadcn `Accordion`) (FR-029)
-- [ ] T079 [P] [US4] `frontend/components/marketing/site-footer.tsx` — footer (FR-029)
-- [ ] T080 [US4] `frontend/app/(public)/page.tsx` — assembles T075–T079 inside T074's public layout; verify mobile-first responsive layout, no horizontal scroll, tokens-only styling (FR-029, FR-031, FR-032) — depends on T075, T076, T077, T078, T079, T074
-- [ ] T081 [P] [US4] `frontend/public/samples/` — bundled sample showcase videos/thumbnails (static marketing assets, distinct from T046's test fixtures)
+- [X] T073 [US4] Verify `frontend/components/layout/theme-toggle.tsx` (built in Foundational, T033b) renders and persists correctly for an anonymous visitor on the public routes — no new component; this is reuse, not creation (FR-030)
+- [X] T074 [US4] `frontend/app/(public)/layout.tsx` — mounts T033c's site-header, reused as-is (it already renders the anonymous "Login"/"Start Creating" + theme-toggle variant for a visitor with no session) around every `(public)/*` route — depends on T033c
+- [X] T075 [P] [US4] `frontend/components/marketing/hero.tsx` — autoplaying muted sample video, headline, "Start Creating" CTA → `/register` (FR-029)
+- [X] T076 [P] [US4] `frontend/components/marketing/how-it-works.tsx` — 3-step explanation: Write idea → Review script → Get video (FR-029)
+- [X] T077 [P] [US4] `frontend/components/marketing/showcase-grid.tsx` — sample-video grid, hover-autoplay (same visual language as T064's Video Card) (FR-029)
+- [X] T078 [P] [US4] `frontend/components/marketing/faq-accordion.tsx` — FAQ section (shadcn `Accordion`) (FR-029)
+- [X] T079 [P] [US4] `frontend/components/marketing/site-footer.tsx` — footer (FR-029)
+- [X] T080 [US4] `frontend/app/(public)/page.tsx` — assembles T075–T079 inside T074's public layout; verify mobile-first responsive layout, no horizontal scroll, tokens-only styling (FR-029, FR-031, FR-032) — depends on T075, T076, T077, T078, T079, T074
+- [X] T081 [P] [US4] `frontend/public/samples/` — bundled sample showcase videos/thumbnails (static marketing assets, distinct from T046's test fixtures)
 
 **Checkpoint**: All four user stories independently functional — feature-complete in mock mode.
 

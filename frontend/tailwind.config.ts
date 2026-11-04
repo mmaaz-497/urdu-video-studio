@@ -28,6 +28,30 @@ const config: Config = {
         '250': '250ms',
         '400': '400ms',
       },
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        'fade-up': {
+          from: { opacity: '0', transform: 'translateY(16px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        drift: {
+          '0%, 100%': { transform: 'translate3d(0,0,0) scale(1)' },
+          '50%': { transform: 'translate3d(4%,-3%,0) scale(1.08)' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 250ms ease-out',
+        'accordion-up': 'accordion-up 250ms ease-in',
+        'fade-up': 'fade-up 400ms ease-out both',
+        drift: 'drift 18s ease-in-out infinite',
+      },
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
