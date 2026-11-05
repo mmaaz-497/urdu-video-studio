@@ -1,0 +1,2 @@
+# Keep the base image's torch; pip must not download a second copy (5 GB disk budget).
+torch==2.14.1

@@ -58,6 +58,6 @@
   },
   "58": {
     "class_type": "SaveVideo",
-    "inputs": {"video": ["57", 0], "filename_prefix": "video/scene", "format": "mp4", "codec": "h264"}
+    "inputs": {"video": ["57", 0], "filename_prefix": "video/scene", "format": "mp4"}
   }
 }

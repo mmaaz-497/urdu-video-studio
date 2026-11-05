@@ -71,3 +71,21 @@ Design runs on the Urdu fine-tune first and falls back to the base `k2-fsa/OmniV
 if `instruct` is unsupported or yields unusable audio. A fine-tune could also *silently*
 ignore `instruct`; if male and female candidates sound alike, rerun with
 `--design-model base`. Seeds make a run repeatable on the same hardware/software.
+
+## Image versions (gpu-worker/Dockerfile)
+
+Researched 2026-11-05. Fixes the startup crash `infer_schema(func): Parameter stride has
+unsupported type list[int]` (comfy_kitchen on torch 2.5.1).
+
+| Component | Pin | Why |
+|---|---|---|
+| Base image | `pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime` (~3.3 GB) | ComfyUI needs torch >= 2.7 (minimum) and recommends recent torch + cu130; runtime variant keeps the image lean |
+| CUDA | 13.0 | Runs on hosts with driver CUDA >= 13.0, incl. the RunPod host reporting 13.2; matches ComfyUI's cu130 wheels |
+| ComfyUI | `v0.44.0` (`COMFYUI_REF` build arg) | Tag, not master. Contains `Wan22ImageToVideoLatent`, `CreateVideo`, `SaveVideo` |
+| comfy-kitchen | 0.2.40 (pinned by ComfyUI v0.44.0 requirements) | |
+| torch | 2.14.1, held by `gpu-worker/constraints.txt` | Prevents pip from pulling a second torch (container disk ~5 GB) |
+
+`workflows/wan22_ti2v5b.json`: all node class names (`UNETLoader`,
+`CLIPLoader`, `VAELoader`, `ModelSamplingSD3`, `CLIPTextEncode`, `Wan22ImageToVideoLatent`,
+`KSampler`, `VAEDecode`, `CreateVideo`, `SaveVideo`) were checked against v0.44.0. One input change: `SaveVideo` no longer gets a flat `"codec":"h264"` (v0.44.0 made codec a nested dynamic combo); `format: mp4` with the default auto codec produces H.264.
+To upgrade: change `COMFYUI_REF`, re-check the nodes and torch minimum in that tag's README.
