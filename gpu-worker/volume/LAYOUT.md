@@ -83,9 +83,16 @@ unsupported type list[int]` (comfy_kitchen on torch 2.5.1).
 | CUDA | 13.0 | Runs on hosts with driver CUDA >= 13.0, incl. the RunPod host reporting 13.2; matches ComfyUI's cu130 wheels |
 | ComfyUI | `v0.44.0` (`COMFYUI_REF` build arg) | Tag, not master. Contains `Wan22ImageToVideoLatent`, `CreateVideo`, `SaveVideo` |
 | comfy-kitchen | 0.2.40 (pinned by ComfyUI v0.44.0 requirements) | |
-| torch | 2.14.1, held by `gpu-worker/constraints.txt` | Prevents pip from pulling a second torch (container disk ~5 GB) |
+| torch / torchvision / torchaudio | 2.14.1 / 0.29.1 / 2.11.0 (all `+cu130`, as shipped in the base image), held by `gpu-worker/constraints.txt` | Prevents pip from pulling a second torch (container disk ~5 GB). Verified: versions unchanged after the build |
+| Python / pip | system Python 3.12 (PEP 668 managed) + `ENV PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1` | The base image refuses plain `pip install`; the env var covers every pip step |
 
 `workflows/wan22_ti2v5b.json`: all node class names (`UNETLoader`,
 `CLIPLoader`, `VAELoader`, `ModelSamplingSD3`, `CLIPTextEncode`, `Wan22ImageToVideoLatent`,
 `KSampler`, `VAEDecode`, `CreateVideo`, `SaveVideo`) were checked against v0.44.0. One input change: `SaveVideo` no longer gets a flat `"codec":"h264"` (v0.44.0 made codec a nested dynamic combo); `format: mp4` with the default auto codec produces H.264.
 To upgrade: change `COMFYUI_REF`, re-check the nodes and torch minimum in that tag's README.
+
+Verified locally (`docker build -f gpu-worker/Dockerfile .`): build succeeds; `import comfy_kitchen`
+works on torch 2.14.1; `python main.py --cpu --quick-test-for-ci` exits 0; `import omnivoice` works.
+Not verifiable without a GPU: actual CUDA init and a real generation job on RunPod.
+Image size on disk: base 6.3 GB, final ~9.0 GB (+2.7 GB). pip resolves `gradio` to the old 3.36.1
+via omnivoice's unpinned dependency (`import omnivoice` still works; not checked whether inference touches gradio).

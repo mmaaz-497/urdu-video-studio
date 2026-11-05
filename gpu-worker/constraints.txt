@@ -1,2 +1,7 @@
-# Keep the base image's torch; pip must not download a second copy (5 GB disk budget).
+# Versions already installed in pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime (verified with
+# `pip list` inside the image). Pinning all three stops ComfyUI/omnivoice requirements from
+# reinstalling a different torch build (would bloat the image past the ~5 GB container disk).
+# `==2.14.1` also matches the installed local version `2.14.1+cu130`.
 torch==2.14.1
+torchvision==0.29.1
+torchaudio==2.11.0

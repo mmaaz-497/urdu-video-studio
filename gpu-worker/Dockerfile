@@ -16,8 +16,16 @@
 #    cu130 wheels ComfyUI documents. 12.x images are not used: ComfyUI says cu130+ is
 #    required on NVIDIA 20-series and newer.
 #  - Disk: the container disk is ~5 GB free, so no devel image, no extra torch copy
-#    (constraints.txt stops pip from replacing torch), --no-cache-dir everywhere.
+#    (constraints.txt pins torch/torchvision/torchaudio to the base image's versions),
+#    PIP_NO_CACHE_DIR=1. Measured: base 6.3 GB on disk, our layers add ~2.7 GB (ComfyUI +
+#    its deps ~1.5 GB, worker deps incl. omnivoice ~0.6 GB, apt ~0.5 GB).
+#  - Base Python is a PEP 668 externally-managed 3.12 (verified), hence PIP_BREAK_SYSTEM_PACKAGES.
 FROM pytorch/pytorch:2.14.1-cuda13.0-cudnn9-runtime
+
+# This base image ships a PEP 668 "externally managed" system Python (not conda like the
+# old 2.5.1 image), so plain `pip install` is refused. These env vars apply to EVERY pip
+# call in the image (ComfyUI deps, worker deps, anything added later).
+ENV PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1
 
 ENV PYTHONUNBUFFERED=1 DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg libsndfile1 \
