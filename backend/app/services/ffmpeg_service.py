@@ -16,10 +16,23 @@ MAX_NARRATION_SPEEDUP = 1.10  # FR-017
 RESOLUTIONS = {"16:9": (1280, 720), "9:16": (720, 1280)}
 
 
+# ffmpeg/ffprobe must never touch the worker's terminal: with an inherited tty stdin,
+# ffmpeg's interactive-key reader gets SIGTTIN when the RQ work-horse is not the
+# foreground process group, freezing both processes (so no timeout can ever fire).
+# stdin=DEVNULL + -nostdin + own session make that impossible.
+_SUBPROCESS_ISOLATION = {"stdin": subprocess.DEVNULL, "start_new_session": True}
+
+
 def _run(cmd: list[str]) -> None:
+    if cmd[0] == "ffmpeg":
+        cmd = [cmd[0], "-nostdin", *cmd[1:]]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS, check=False
+            cmd,
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS,
+            check=False,
+            **_SUBPROCESS_ISOLATION,
         )
     except subprocess.TimeoutExpired as exc:
         logger.error("ffmpeg_timed_out", extra={"cmd": cmd[0]})
@@ -41,7 +54,12 @@ def _probe_duration(path: str) -> float:
     ]
     try:
         result = subprocess.run(
-            cmd, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS, check=False, text=True
+            cmd,
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS,
+            check=False,
+            text=True,
+            **_SUBPROCESS_ISOLATION,
         )
     except subprocess.TimeoutExpired as exc:
         raise AppError(

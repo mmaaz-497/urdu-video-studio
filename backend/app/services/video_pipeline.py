@@ -26,9 +26,25 @@ logger = get_logger(__name__)
 MOCK_STEP_DELAY_SECONDS = 1.0
 
 
+STORAGE_TIMEOUT_SECONDS = 30
+UPLOAD_TIMEOUT_SECONDS = 90
+DOWNLOAD_TOTAL_TIMEOUT_SECONDS = 120
+
+
+def _storage_call(coro, timeout: float = STORAGE_TIMEOUT_SECONDS):
+    """Run a storage coroutine with a hard deadline; a hang becomes a friendly failure."""
+    try:
+        return asyncio.run(asyncio.wait_for(coro, timeout))
+    except TimeoutError as exc:
+        logger.error("storage_call_timed_out", extra={"timeout": timeout})
+        raise AppError(
+            "STORAGE_UNAVAILABLE", "Storage is temporarily unavailable. Please try again."
+        ) from exc
+
+
 def _upload(key: str, data: bytes, content_type: str) -> None:
     storage = get_storage()
-    asyncio.run(storage.upload(key, data, content_type))
+    _storage_call(storage.upload(key, data, content_type), UPLOAD_TIMEOUT_SECONDS)
 
 
 def run_job(job_id: str) -> None:
@@ -38,8 +54,13 @@ def run_job(job_id: str) -> None:
     try:
         job = video_job_service.get_job(db, uuid.UUID(job_id))
         if job is None:
-            logger.warning("video_job_not_found", extra={"job_id": job_id})
-            return
+            # The DB row is gone (deleted / DB reset): a stale queue entry. Log loudly and
+            # return so RQ finishes and discards the entry; never run or "succeed" silently.
+            logger.error(
+                "video_job_not_found: no DB row for this job id, discarding stale queue entry",
+                extra={"job_id": job_id},
+            )
+            return "discarded:video_job_not_found"
 
         try:
             if get_settings().VIDEO_PROVIDER == "runpod":
@@ -121,17 +142,20 @@ def _cleanup_intermediates(keys: list[str]) -> None:
     storage = get_storage()
     for key in keys:
         try:
-            asyncio.run(storage.delete(key))
+            _storage_call(storage.delete(key))
         except Exception:  # noqa: BLE001
             logger.warning("intermediate_cleanup_failed", extra={"key": key}, exc_info=True)
 
 
 def _download(url: str, dest: Path) -> str:
+    deadline = time.monotonic() + DOWNLOAD_TOTAL_TIMEOUT_SECONDS
     try:
         with httpx.stream("GET", url, timeout=30, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(dest, "wb") as f:
                 for chunk in resp.iter_bytes():
+                    if time.monotonic() > deadline:  # per-read timeouts don't bound a slow trickle
+                        raise httpx.ReadTimeout("download exceeded total deadline")
                     f.write(chunk)
     except httpx.HTTPError as exc:
         logger.error("gpu_asset_download_failed", extra={"error": str(exc)})
@@ -156,8 +180,8 @@ def _run_runpod(db, job) -> None:
     clip_keys = [f"jobs/{job.id}/scene{i}.mp4" for i in range(1, scene_count + 1)]
     narration_key = f"jobs/{job.id}/narration.wav"
     put_urls = {
-        "clips": [asyncio.run(storage.get_presigned_put_url(k, "video/mp4")) for k in clip_keys],
-        "narration": asyncio.run(storage.get_presigned_put_url(narration_key, "audio/wav")),
+        "clips": [_storage_call(storage.get_presigned_put_url(k, "video/mp4")) for k in clip_keys],
+        "narration": _storage_call(storage.get_presigned_put_url(narration_key, "audio/wav")),
     }
 
     video_job_service.mark_status(db, job.id, "generating_scenes", progress_current_scene=0)
@@ -194,10 +218,10 @@ def _run_runpod(db, job) -> None:
     with tempfile.TemporaryDirectory(prefix=f"job-{job.id}-") as tmp:
         tmp_path = Path(tmp)
         clips = [
-            _download(asyncio.run(storage.get_download_url(k)), tmp_path / f"scene{i}.mp4")
+            _download(_storage_call(storage.get_download_url(k)), tmp_path / f"scene{i}.mp4")
             for i, k in enumerate(clip_keys, start=1)
         ]
         narration = _download(
-            asyncio.run(storage.get_download_url(narration_key)), tmp_path / "narration.wav"
+            _storage_call(storage.get_download_url(narration_key)), tmp_path / "narration.wav"
         )
         _finalize(db, job, clips, narration, tmp_path, [*clip_keys, narration_key])

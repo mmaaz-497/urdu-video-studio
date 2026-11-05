@@ -2,7 +2,11 @@ from pathlib import Path
 
 from app.core.config import get_settings
 
+# Where the backend mounts the files. The frontend proxy (Next.js rewrite in dev, Caddy in
+# prod) strips the leading /api before forwarding, so the backend still sees /static.
 STATIC_MOUNT_PATH = "/static"
+# What the browser is given: same-origin under /api so the existing /api/* proxy rule covers it.
+PUBLIC_URL_PREFIX = "/api" + STATIC_MOUNT_PATH
 
 
 class LocalStorageService:
@@ -25,11 +29,11 @@ class LocalStorageService:
         path.write_bytes(data)
 
     async def get_download_url(self, key: str) -> str:
-        return f"{STATIC_MOUNT_PATH}/{key}"
+        return f"{PUBLIC_URL_PREFIX}/{key}"
 
     async def get_presigned_put_url(self, key: str, content_type: str) -> str:
         # No presigned-PUT concept locally; callers write directly via upload().
-        return f"{STATIC_MOUNT_PATH}/{key}"
+        return f"{PUBLIC_URL_PREFIX}/{key}"
 
     async def delete(self, key: str) -> None:
         path = self._resolve(key)
