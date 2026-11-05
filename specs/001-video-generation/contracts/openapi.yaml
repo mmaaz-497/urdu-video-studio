@@ -398,7 +398,7 @@ components:
           maxItems: 3
           description: "English scene prompts; count = durationSeconds / 5"
         wordCount: { type: integer, description: "Live word-counter value for the Review screen" }
-        wordLimit: { type: integer, description: "Target ceiling for the chosen duration (~13-15 words per 5s)" }
+        wordLimit: { type: integer, description: "Target ceiling for the chosen duration (12 words per 5s, calibrated)" }
 
     CreateVideoJobRequest:
       type: object

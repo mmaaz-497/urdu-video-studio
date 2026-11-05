@@ -218,21 +218,25 @@ are business rules this spec treats as hard gates (FR-010, FR-017), not just LLM
 formatting concerns, so the backend re-checks them independently of whatever the
 model claims.
 
-> **⚠️ Calibration warning — `WORDS_PER_5S_MAX` (`backend/app/services/llm_service.py`)**:
-> the "~13-15 words per 5s" ceiling is an *estimate* of Urdu speaking rate,
-> chosen without a real TTS voice to measure against (Phase 3 ran entirely in
-> `VIDEO_PROVIDER=mock`, where narration is a bundled placeholder clip, not
-> synthesized from the script). It directly sets `wordLimit` (shown to the
-> student, enforced as a hard gate on `POST /videos`) and is the number the
-> LLM is prompted to stay under. **If this constant is wrong, every real job
-> fails**: too generous and OmniVoice's actual narration will routinely need
-> more than the 10% `atempo` speedup FFmpeg allows (A6), landing every job in
-> `SCRIPT_TOO_LONG`; too strict and students get needlessly short scripts.
-> **Before/during Phase 7** (first real OmniVoice integration), this constant
-> MUST be re-measured against real narration audio — synthesize a range of
-> word counts per voice, record actual seconds-per-word, and update
-> `WORDS_PER_5S_MAX` (and re-derive `WORD_TARGET_RATIO`'s target) from that
-> measurement rather than the current estimate.
+> **✅ Calibrated — `WORDS_PER_5S_MAX = 12` (`backend/app/services/llm_service.py`)**
+> (2026-11-05). It was previously an estimate ("~13-15 words per 5s") chosen
+> before any real TTS audio existed. `gpu-worker/scripts/calibrate_words.py`
+> has now been run against real OmniVoice output on both preset voices:
+>
+> | Voice | Mean words/s | Min words/s |
+> |---|---|---|
+> | Male | 2.62 | 2.42 |
+> | Female | 2.58 | 2.26 |
+>
+> The script's own recommendation was 13 words per 5 s, but that figure
+> depends on the 1.10x `atempo` speed-up (A6) for most jobs, leaving them at
+> the `SCRIPT_TOO_LONG` edge. **12 was chosen instead**: mean speech for 12
+> words is ~4.6-4.7 s and the slowest measured sample ~5.3 s (the cap with
+> `atempo` is 5.5 s), so narration fits without speed-up normally and `atempo`
+> stays a rare safety net. The constant drives `wordLimit` (shown to the
+> student, enforced as a hard gate on `POST /videos`) and the LLM prompt
+> target (`WORD_TARGET_RATIO` 0.92 -> ~11 words per 5 s; the slowest measured voice, 2.26 words/s, finishes 11 words in ~4.87 s, inside the 5 s scene with no speed-up). Re-run the
+> calibration if the voices, TTS model, or typical script style change.
 
 ### A10. Polling vs. WebSockets for progress updates
 

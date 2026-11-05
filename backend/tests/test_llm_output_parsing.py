@@ -9,9 +9,9 @@ from app.core.errors import AppError
 from app.services import llm_service, moderation_service
 from app.services.llm_service import ScriptGenerationOutput
 
-VALID_SCRIPT = " ".join(["لفظ"] * 14)  # 14 "words" -> under the 1-scene (5s) 15-word hard limit
+VALID_SCRIPT = " ".join(["لفظ"] * 11)  # 11 "words" -> under the 1-scene (5s) 12-word hard limit
 WRONG_SCENE_COUNT_SCRIPT = " ".join(["لفظ"] * 14)
-OVER_LIMIT_SCRIPT = " ".join(["لفظ"] * 20)  # 20 "words" -> over the 1-scene (5s) 15-word hard limit
+OVER_LIMIT_SCRIPT = " ".join(["لفظ"] * 20)  # 20 "words" -> over the 1-scene (5s) 12-word hard limit
 
 
 def _body(**overrides) -> dict:
@@ -70,8 +70,8 @@ def test_valid_structured_output_accepted(auth_client, monkeypatch):
     body = resp.json()
     assert body["correctedIdea"] == "مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے"
     assert body["scenes"] == ["A student writing notes in a classroom"]
-    assert body["wordCount"] == 14
-    assert body["wordLimit"] == 15
+    assert body["wordCount"] == 11
+    assert body["wordLimit"] == 12
 
 
 def test_invalid_output_retries_once_then_fails(auth_client, monkeypatch):

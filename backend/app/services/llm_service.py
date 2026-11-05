@@ -12,8 +12,8 @@ from app.services import moderation_service
 logger = get_logger(__name__)
 
 LLM_CALL_TIMEOUT_SECONDS = 20.0
-WORDS_PER_5S_MAX = 15  # hard per-5s-scene ceiling (research.md A9's "~13-15 words per 5s")
-WORD_TARGET_RATIO = 0.85  # prompted target, leaving headroom under the hard ceiling
+WORDS_PER_5S_MAX = 12  # hard per-5s-scene ceiling; calibrated on real OmniVoice (research.md A9)
+WORD_TARGET_RATIO = 0.92  # prompted target, leaving headroom under the hard ceiling
 
 # corrected_idea must be ~100% Urdu script; this allows a couple of genuine
 # brand/technical names (e.g. "OmniVoice") to stay in Latin letters.

@@ -32,7 +32,7 @@ download a finished video — with no help from anyone else.
    visual option cards — **Then** the "Generate Script" action becomes available.
 2. **Given** a valid idea and selections, **When** the student clicks "Generate
    Script", **Then** the system returns a corrected idea, a right-to-left Urdu
-   narration script sized to the chosen duration (~13–15 Urdu words per 5
+   narration script sized to the chosen duration (at most 12 Urdu words per 5
    seconds), and one scene description per 5 seconds of the chosen duration (1,
    2, or 3 scenes) — without starting any video/voice generation yet.
 3. **Given** the Review screen, **When** the student edits the script, **Then** a
@@ -222,9 +222,9 @@ it persist on reload, and click "Start Creating" to land on sign-up.
   duration (5, 10, or 15 seconds), an aspect ratio (16:9 or 9:16), and a voice
   (Male or Female, each with a short preview sample) before generating a script.
 - **FR-007**: System MUST, on "Generate Script", produce: a corrected version of
-  the idea, an Urdu narration script sized to the chosen duration (approximately
-  13–15 Urdu words per 5 seconds — e.g., ~13–15 words for 5s, ~26–30 for 10s,
-  ~39–45 for 15s), and exactly one scene description per 5 seconds of the chosen
+  the idea, an Urdu narration script sized to the chosen duration (at most
+  12 Urdu words per 5 seconds, calibrated on real TTS — i.e., ≤12 words for 5s, ≤24 for 10s,
+  ≤36 for 15s), and exactly one scene description per 5 seconds of the chosen
   duration (1, 2, or 3 scenes).
 - **FR-008**: System MUST screen every idea for unsafe or inappropriate content
   (violence, adult, hate, self-harm) and reject matches with a polite, friendly

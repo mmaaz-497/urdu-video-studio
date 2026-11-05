@@ -7,7 +7,7 @@ from app.services import video_pipeline
 from app.services.mock_provider import pick_assets
 from app.services.video_pipeline import run_job
 
-SHORT_SCRIPT = " ".join(["لفظ"] * 10)  # 10 words -> fits a 5s (1-scene, limit-15) video
+SHORT_SCRIPT = " ".join(["لفظ"] * 10)  # 10 words -> fits a 5s (1-scene, limit-12) video
 
 
 def _video_body(**overrides) -> dict:
