@@ -95,7 +95,31 @@ def test_runpod_branch_uses_provider_then_shared_ffmpeg_finalize(
     assert calls["narration"] == SCRIPT
     assert calls["presigned_put_urls"]["clips"][0].startswith("https://r2.test/put/jobs/")
     assert "ct=audio/wav" in calls["presigned_put_urls"]["narration"]
-    assert len(runpod_env.deleted) == 2  # raw clip + narration cleaned up
+    # Raw GPU intermediates are deleted; the final MP4 + thumbnail are kept.
+    assert sorted(runpod_env.deleted) == [
+        f"jobs/{job_id}/narration.wav",
+        f"jobs/{job_id}/scene1.mp4",
+    ]
+    assert f"videos/{job_id}_thumb.jpg" in runpod_env.uploaded
+    assert not any(k.startswith("videos/") for k in runpod_env.deleted)
+
+
+def test_cleanup_failure_never_fails_the_job(auth_client, db_session, runpod_env, monkeypatch):
+    client, headers, _ = auth_client
+    monkeypatch.setattr(
+        runpod_provider,
+        "generate",
+        lambda **kw: {"scene_count": 1, "narration_duration_seconds": 4.2},
+    )
+
+    async def _boom(key):
+        raise RuntimeError("r2 down")
+
+    monkeypatch.setattr(runpod_env, "delete", _boom)
+    job_id = client.post("/videos", json=_body(), headers=headers).json()["id"]
+    run_job(job_id)
+    db_session.expire_all()
+    assert client.get(f"/videos/{job_id}", headers=headers).json()["status"] == "ready"
 
 
 def test_runpod_unavailable_fails_job_and_reverses_usage(

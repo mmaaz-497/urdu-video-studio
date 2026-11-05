@@ -83,8 +83,17 @@ def _run_mock(db, job) -> None:
         _finalize(db, job, assets["clips"], assets["narration"], Path(tmp))
 
 
-def _finalize(db, job, clips: list[str], narration: str, tmp_path: Path) -> None:
-    """FFmpeg assemble + upload + mark ready. Shared by the mock and runpod paths."""
+def _finalize(
+    db,
+    job,
+    clips: list[str],
+    narration: str,
+    tmp_path: Path,
+    intermediate_keys: list[str] | None = None,
+) -> None:
+    """FFmpeg assemble + upload + mark ready, then best-effort delete of the job's raw
+    intermediate storage keys. Shared by the mock and runpod paths (the mock path
+    writes no intermediates to storage, so it passes none)."""
     video_job_service.mark_status(db, job.id, "finalizing")
     concat_path = str(tmp_path / "concat.mp4")
     narrated_path = str(tmp_path / "narrated.mp4")
@@ -102,6 +111,19 @@ def _finalize(db, job, clips: list[str], narration: str, tmp_path: Path) -> None
     _upload(thumb_key, Path(thumb_path).read_bytes(), "image/jpeg")
 
     video_job_service.mark_status(db, job.id, "ready", video_url=video_key, thumbnail_url=thumb_key)
+    _cleanup_intermediates(intermediate_keys or [])
+
+
+def _cleanup_intermediates(keys: list[str]) -> None:
+    """Best-effort: a failed delete is logged and never fails the job."""
+    if not keys:
+        return
+    storage = get_storage()
+    for key in keys:
+        try:
+            asyncio.run(storage.delete(key))
+        except Exception:  # noqa: BLE001
+            logger.warning("intermediate_cleanup_failed", extra={"key": key}, exc_info=True)
 
 
 def _download(url: str, dest: Path) -> str:
@@ -178,10 +200,4 @@ def _run_runpod(db, job) -> None:
         narration = _download(
             asyncio.run(storage.get_download_url(narration_key)), tmp_path / "narration.wav"
         )
-        _finalize(db, job, clips, narration, tmp_path)
-
-    for key in [*clip_keys, narration_key]:  # best-effort cleanup of the raw GPU outputs
-        try:
-            asyncio.run(storage.delete(key))
-        except Exception:  # noqa: BLE001
-            logger.warning("gpu_temp_cleanup_failed", extra={"key": key})
+        _finalize(db, job, clips, narration, tmp_path, [*clip_keys, narration_key])

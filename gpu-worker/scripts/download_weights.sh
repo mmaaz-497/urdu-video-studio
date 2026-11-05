@@ -11,7 +11,8 @@
 #        export HF_TOKEN=hf_xxx                       # optional; avoids rate limits
 #        bash download_weights.sh                     # copy this file to the pod first
 #      Override the mount point if needed:  VOLUME_ROOT=/workspace bash download_weights.sh
-#   3. Upload reference voices yourself (not downloaded here), e.g. via scp/runpodctl:
+#   3. Preset voices are NOT downloaded here; synthesize them with scripts/make_voices.py
+#      (OmniVoice Voice Design, no real speaker). Expected output files:
 #        /runpod-volume/voices/{male,female}.wav  and  {male,female}.txt (transcripts)
 #   4. Re-run any time: files already present are skipped; interrupted downloads resume.
 #   5. TERMINATE the pod afterwards (the volume keeps the data; the pod keeps billing).
@@ -86,6 +87,6 @@ echo "=== Volume contents ==="
 du -h --max-depth=3 "$VOLUME_ROOT/models" | sort -k2
 echo
 for v in male female; do
-  [ -f "$VOICES_DIR/$v.wav" ] && echo "OK    voices/$v.wav" || echo "TODO  upload $VOICES_DIR/$v.wav (+ $v.txt transcript)"
+  [ -f "$VOICES_DIR/$v.wav" ] && echo "OK    voices/$v.wav" || echo "TODO  upload $VOICES_DIR/$v.wav (+ $v.txt) - run scripts/make_voices.py"
 done
 df -h "$VOLUME_ROOT" | tail -1
