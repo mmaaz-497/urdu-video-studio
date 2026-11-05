@@ -11,6 +11,8 @@ FFMPEG_TIMEOUT_SECONDS = 60
 # re-encode for a video that is already correct to the eye/ear.
 DURATION_TOLERANCE_SECONDS = 0.05
 
+MAX_NARRATION_SPEEDUP = 1.10  # FR-017
+
 RESOLUTIONS = {"16:9": (1280, 720), "9:16": (720, 1280)}
 
 
@@ -82,7 +84,7 @@ def attach_narration(
     narration_path: str,
     duration_seconds: float,
     out_path: str,
-    max_speedup: float = 1.10,
+    max_speedup: float = MAX_NARRATION_SPEEDUP,
 ) -> str:
     """Attaches narration to the (silent) video, speeding the audio up by at
     most `max_speedup` if it's longer than the video (FR-017). Raises

@@ -221,20 +221,20 @@ GPU worker image (new item #3). This phase is independent of the mock-mode
 user stories above and can be built/tested entirely separately against a real
 RunPod account.
 
-- [ ] T082 [P] `gpu-worker/volume/LAYOUT.md` — documents the RunPod network volume layout: `/runpod-volume/models/wan2.2-ti2v-5b/`, `/runpod-volume/models/omnivoice-urdu-6000/`, `/runpod-volume/voices/male.wav`, `/runpod-volume/voices/female.wav`
-- [ ] T083 [P] `gpu-worker/scripts/download_weights.sh` — one-time, idempotent script (skips files already present) that downloads exactly these weights onto the network volume at the T082 paths:
+- [X] T082 [P] `gpu-worker/volume/LAYOUT.md` — documents the RunPod network volume layout: `/runpod-volume/models/wan2.2-ti2v-5b/`, `/runpod-volume/models/omnivoice-urdu-6000/`, `/runpod-volume/voices/male.wav`, `/runpod-volume/voices/female.wav`
+- [X] T083 [P] `gpu-worker/scripts/download_weights.sh` — one-time, idempotent script (skips files already present) that downloads exactly these weights onto the network volume at the T082 paths:
   - `Comfy-Org/Wan_2.2_ComfyUI_Repackaged` → `split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors`
   - `Comfy-Org/Wan_2.1_ComfyUI_repackaged` → `split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors`
   - `Comfy-Org/Wan_2.2_ComfyUI_Repackaged` → `split_files/vae/wan2.2_vae.safetensors`
   - `mlwithabdullah/omnivoice-urdu-6000` (full repo)
-- [ ] T083a `gpu-worker/comfyui/extra_model_paths.yaml` — ComfyUI config pointing its `diffusion_models`/`text_encoders`/`vae` search paths at the T082 network-volume directories, so T084's workflow can reference model filenames without any absolute path baked into the workflow JSON — depends on T082, T083
-- [ ] T084 `gpu-worker/workflows/wan22_ti2v5b.json` — ComfyUI API-format workflow template, parameterized by prompt/resolution/frame-count, referencing the three model files from T083 by name (resolved via T083a's search paths) (research.md A4) — depends on T083a
-- [ ] T085 `gpu-worker/handler.py` — RunPod Serverless entrypoint: starts headless ComfyUI, submits T084 per scene (16:9→1280×704, 9:16→704×1280, 121 frames@24fps), calls `runpod.serverless.progress_update()` after each completed scene (research.md A4) — depends on T084
-- [ ] T086 `gpu-worker/omnivoice/infer.py` — OmniVoice Urdu single-pass narration synthesis against the chosen voice's reference file from the T082 volume (research.md A5)
-- [ ] T087 `gpu-worker/handler.py` — extend: after T085/T086 complete, `PUT` the raw clips + narration audio to the presigned R2 URLs supplied in the job input; every PUT has a 30s timeout + 2 retries, surfacing a job-level failure (not a crash) on exhaustion (Complexity Tracking's justified exception) — depends on T085, T086
-- [ ] T088 `gpu-worker/Dockerfile` — container image: ComfyUI + Python deps baked in; model weights are **not** baked in — mounted from the network volume at runtime (new item #3) — depends on T085
-- [ ] T089 `backend/app/services/runpod_provider.py` — backend-side client: `submit_job(scenes, resolution, frames, narration, voice_id, presigned_put_urls)` via the `runpod` SDK, polls status/progress; 30s connect timeout + 3 retries with backoff; friendly `AppError("RUNPOD_UNAVAILABLE")` on exhaustion (FR pipeline, Constitution Principle V) — depends on T025
-- [ ] T090 `backend/app/services/video_pipeline.py` — extend `run_job()` to branch on `VIDEO_PROVIDER`: `mock` keeps using T047 unchanged; `runpod` generates presigned PUT URLs via T025 and calls T089, then proceeds through the *same* T048 FFmpeg finalize step either way — depends on T089, T049
+- [X] T083a `gpu-worker/comfyui/extra_model_paths.yaml` — ComfyUI config pointing its `diffusion_models`/`text_encoders`/`vae` search paths at the T082 network-volume directories, so T084's workflow can reference model filenames without any absolute path baked into the workflow JSON — depends on T082, T083
+- [X] T084 `gpu-worker/workflows/wan22_ti2v5b.json` — ComfyUI API-format workflow template, parameterized by prompt/resolution/frame-count, referencing the three model files from T083 by name (resolved via T083a's search paths) (research.md A4) — depends on T083a
+- [X] T085 `gpu-worker/handler.py` — RunPod Serverless entrypoint: starts headless ComfyUI, submits T084 per scene (16:9→1280×704, 9:16→704×1280, 121 frames@24fps), calls `runpod.serverless.progress_update()` after each completed scene (research.md A4) — depends on T084
+- [X] T086 `gpu-worker/omnivoice/infer.py` — OmniVoice Urdu single-pass narration synthesis against the chosen voice's reference file from the T082 volume (research.md A5)
+- [X] T087 `gpu-worker/handler.py` — extend: after T085/T086 complete, `PUT` the raw clips + narration audio to the presigned R2 URLs supplied in the job input; every PUT has a 30s timeout + 2 retries, surfacing a job-level failure (not a crash) on exhaustion (Complexity Tracking's justified exception) — depends on T085, T086
+- [X] T088 `gpu-worker/Dockerfile` — container image: ComfyUI + Python deps baked in; model weights are **not** baked in — mounted from the network volume at runtime (new item #3) — depends on T085
+- [X] T089 `backend/app/services/runpod_provider.py` — backend-side client: `submit_job(scenes, resolution, frames, narration, voice_id, presigned_put_urls)` via the `runpod` SDK, polls status/progress; 30s connect timeout + 3 retries with backoff; friendly `AppError("RUNPOD_UNAVAILABLE")` on exhaustion (FR pipeline, Constitution Principle V) — depends on T025
+- [X] T090 `backend/app/services/video_pipeline.py` — extend `run_job()` to branch on `VIDEO_PROVIDER`: `mock` keeps using T047 unchanged; `runpod` generates presigned PUT URLs via T025 and calls T089, then proceeds through the *same* T048 FFmpeg finalize step either way — depends on T089, T049
 
 **Checkpoint**: Setting `VIDEO_PROVIDER=runpod` with real credentials produces
 real generated videos through the identical API/DB/UI surface used in mock mode.

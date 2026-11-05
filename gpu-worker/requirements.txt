@@ -1,2 +1,6 @@
-# Placeholder only — real contents (runpod, ComfyUI deps, OmniVoice inference
-# deps, torch, etc.) are added in Phase 7 (Real GPU Pipeline).
+# GPU worker deps beyond ComfyUI's own requirements and the CUDA torch in the base image.
+runpod>=1.7
+requests>=2.32
+numpy
+soundfile>=0.12
+omnivoice

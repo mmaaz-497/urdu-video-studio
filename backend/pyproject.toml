@@ -20,6 +20,7 @@ dependencies = [
     "httpx>=0.27",
     "python-dotenv>=1.0",
     "psycopg[binary]>=3.2",
+    "runpod>=1.7",
 ]
 
 [project.optional-dependencies]

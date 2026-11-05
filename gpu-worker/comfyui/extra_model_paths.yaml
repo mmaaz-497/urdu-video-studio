@@ -1,0 +1,8 @@
+# Points ComfyUI at the network-volume model folders (see volume/LAYOUT.md).
+# Passed to ComfyUI via:  --extra-model-paths-config /app/extra_model_paths.yaml
+# Workflow JSON references bare filenames only; no absolute paths.
+urdu_volume:
+  base_path: /runpod-volume/models/wan2.2-ti2v-5b/
+  diffusion_models: diffusion_models/
+  text_encoders: text_encoders/
+  vae: vae/
