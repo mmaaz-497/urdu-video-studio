@@ -1,3 +1,6 @@
+# BUILD CONTEXT MUST BE THE REPO ROOT (RunPod's GitHub builder only lets you set the
+# Dockerfile path), so every COPY source below is prefixed with gpu-worker/.
+# Local equivalent: docker build -f gpu-worker/Dockerfile -t urdu-gpu-worker .
 # GPU worker image: ComfyUI + Python deps. Model weights are NOT baked in; they are
 # read from the RunPod network volume mounted at /runpod-volume (see volume/LAYOUT.md).
 FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
@@ -13,15 +16,15 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI.git /comfyui \
     && pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
-COPY requirements.txt /app/requirements.txt
+COPY gpu-worker/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY handler.py /app/handler.py
-COPY comfyui/extra_model_paths.yaml /app/extra_model_paths.yaml
-COPY workflows /app/workflows
+COPY gpu-worker/handler.py /app/handler.py
+COPY gpu-worker/comfyui/extra_model_paths.yaml /app/extra_model_paths.yaml
+COPY gpu-worker/workflows /app/workflows
 # Installed under a different name than the pip package `omnivoice` to avoid a clash.
-COPY omnivoice /app/tts_omnivoice
-COPY scripts/calibrate_words.py /app/scripts/calibrate_words.py
+COPY gpu-worker/omnivoice /app/tts_omnivoice
+COPY gpu-worker/scripts/calibrate_words.py /app/scripts/calibrate_words.py
 
 ENV COMFYUI_DIR=/comfyui EXTRA_MODEL_PATHS=/app/extra_model_paths.yaml VOLUME_ROOT=/runpod-volume
 CMD ["python", "-u", "/app/handler.py"]

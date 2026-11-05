@@ -1,0 +1,10 @@
+frontend/
+backend/
+specs/
+history/
+.git
+node_modules
+.venv
+sample-media/
+.screenshots/
+*.md
