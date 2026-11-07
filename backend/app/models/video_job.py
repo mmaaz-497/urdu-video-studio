@@ -58,7 +58,7 @@ class VideoJob(Base):
     corrected_idea: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     urdu_script: Mapped[str] = mapped_column(Text, nullable=False)
-    scenes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    scenes: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
     duration_seconds: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     aspect_ratio: Mapped[str] = mapped_column(String, nullable=False)
     voice_id: Mapped[str] = mapped_column(String, nullable=False)

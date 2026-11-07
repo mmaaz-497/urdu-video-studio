@@ -78,12 +78,11 @@ def main() -> int:
     clip_url, wav_url = asyncio.run(presign())
     payload = {
         "input": {
-            "scenes": [PROMPT],
+            "scenes": [{"visual_prompt": PROMPT, "narration": NARRATION}],
             "aspect_ratio": "16:9",
             "frames": 121,
-            "narration": NARRATION,
             "voice_id": "male",
-            "presigned_put_urls": {"clips": [clip_url], "narration": wav_url},
+            "presigned_put_urls": {"clips": [clip_url], "narrations": [wav_url]},
         }
     }
     job_id = rp("POST", f"{eid}/run", key, payload)["id"]

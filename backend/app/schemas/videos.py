@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.scripts import Scene
+
 VideoJobStatus = Literal[
     "queued", "preparing", "generating_scenes", "adding_voice", "finalizing", "ready", "failed"
 ]
@@ -13,8 +15,8 @@ class CreateVideoJobRequest(BaseModel):
     idempotencyKey: uuid.UUID
     correctedIdea: str
     title: str
-    urduScript: str
-    scenes: list[str] = Field(min_length=1, max_length=3)
+    urduScript: str | None = None  # ignored: derived server-side from scenes[].narrationUr
+    scenes: list[Scene] = Field(min_length=1, max_length=3)
     durationSeconds: Literal[5, 10, 15]
     aspectRatio: Literal["16:9", "9:16"]
     voiceId: Literal["male", "female"]
@@ -49,3 +51,9 @@ class VideoJobListItem(VideoJobSummary):
 class VideoJobListResponse(BaseModel):
     items: list[VideoJobListItem]
     nextCursor: str | None = None
+
+
+class VideoDownload(BaseModel):
+    url: str
+    filename: str
+    expiresInSeconds: int

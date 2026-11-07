@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ApiError, apiClient } from '@/lib/api-client'
 import { clearDraft, readDraft, writeDraft, type ReviewDraft } from '@/lib/review-draft'
 import { formatResetTime, useUsage } from '@/lib/use-usage'
-import type { GeneratedScript, VideoJob } from '@/lib/types'
+import type { GeneratedScript, Scene, VideoJob } from '@/lib/types'
 
 function wordCount(text: string): number {
   const trimmed = text.trim()
@@ -23,9 +23,8 @@ export default function ReviewPage() {
   const [draft, setDraft] = useState<ReviewDraft | null>(null)
   const [title, setTitle] = useState('')
   const [correctedIdea, setCorrectedIdea] = useState('')
-  const [urduScript, setUrduScript] = useState('')
-  const [scenes, setScenes] = useState<string[]>([])
-  const [wordLimit, setWordLimit] = useState(0)
+  const [scenes, setScenes] = useState<Scene[]>([])
+  const [sceneWordLimit, setSceneWordLimit] = useState(0)
   const [regenerating, setRegenerating] = useState(false)
   const [approving, setApproving] = useState(false)
   const { data: profile } = useUsage()
@@ -41,17 +40,21 @@ export default function ReviewPage() {
     setDraft(stored)
     setTitle(stored.title)
     setCorrectedIdea(stored.correctedIdea)
-    setUrduScript(stored.urduScript)
     setScenes(stored.scenes)
-    setWordLimit(stored.wordLimit)
+    setSceneWordLimit(stored.sceneWordLimit)
   }, [router])
 
-  const currentWordCount = wordCount(urduScript)
-  const overLimit = currentWordCount > wordLimit
+  // Each scene is spoken over its own 5 s clip, so the limit and the gate are per scene.
+  const sceneCounts = scenes.map((scene) => wordCount(scene.narrationUr))
+  const totalWords = sceneCounts.reduce((sum, n) => sum + n, 0)
+  const sceneProblem = scenes.some(
+    (scene, i) =>
+      sceneCounts[i] === 0 || sceneCounts[i] > sceneWordLimit || scene.visualPrompt.trim() === ''
+  )
   const busy = regenerating || approving
 
-  function updateScene(index: number, value: string) {
-    setScenes((prev) => prev.map((scene, i) => (i === index ? value : scene)))
+  function updateScene(index: number, patch: Partial<Scene>) {
+    setScenes((prev) => prev.map((scene, i) => (i === index ? { ...scene, ...patch } : scene)))
   }
 
   async function handleRegenerate() {
@@ -71,9 +74,8 @@ export default function ReviewPage() {
       setDraft(nextDraft)
       setTitle(script.title)
       setCorrectedIdea(script.correctedIdea)
-      setUrduScript(script.urduScript)
       setScenes(script.scenes)
-      setWordLimit(script.wordLimit)
+      setSceneWordLimit(script.sceneWordLimit)
       toast.success('Regenerated a fresh script.')
     } catch (error) {
       const message =
@@ -85,7 +87,7 @@ export default function ReviewPage() {
   }
 
   async function handleApprove() {
-    if (!draft || overLimit || busy || limitReached) return
+    if (!draft || sceneProblem || busy || limitReached) return
     setApproving(true)
     const idempotencyKey = crypto.randomUUID()
     try {
@@ -93,7 +95,6 @@ export default function ReviewPage() {
         idempotencyKey,
         correctedIdea,
         title,
-        urduScript,
         scenes,
         durationSeconds: draft.durationSeconds,
         aspectRatio: draft.aspectRatio,
@@ -155,39 +156,65 @@ export default function ReviewPage() {
         />
       </section>
 
-      <section className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="text-h3 font-semibold" htmlFor="urdu-script">
-            Narration script
-          </label>
-          <WordCounter count={currentWordCount} limit={wordLimit} />
-        </div>
-        <Textarea
-          id="urdu-script"
-          value={urduScript}
-          onChange={(event) => setUrduScript(event.target.value)}
-          disabled={busy}
-          rows={6}
-          dir="rtl"
-          className="urdu resize-none"
-        />
-      </section>
-
       <section className="space-y-3">
-        <h3 className="text-h3 font-semibold">Scenes</h3>
-        <div className="space-y-3">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-h3 font-semibold">Scenes</h3>
+            <span className="text-body-sm text-muted-foreground tabular-nums">
+              {totalWords} words in total
+            </span>
+          </div>
+          <p className="text-body-sm text-muted-foreground">
+            Each scene is 5 seconds. The narration is spoken over its own scene, so keep the picture
+            and the words about the same thing.
+          </p>
+        </div>
+        <div className="space-y-4">
           {scenes.map((scene, index) => (
-            <div key={index} className="space-y-1">
-              <span className="text-body-sm font-medium text-muted-foreground">
+            <div
+              key={index}
+              data-testid="scene-card"
+              className="space-y-3 rounded-md border border-border bg-surface p-4 shadow-raised"
+            >
+              <span className="text-body-sm font-semibold text-muted-foreground">
                 Scene {index + 1}
               </span>
-              <Textarea
-                value={scene}
-                onChange={(event) => updateScene(index, event.target.value)}
-                disabled={busy}
-                rows={2}
-                className="resize-none"
-              />
+              <div className="space-y-1">
+                <label
+                  className="text-body-sm font-medium text-muted-foreground"
+                  htmlFor={`visual-${index}`}
+                >
+                  What you will see (English)
+                </label>
+                <Textarea
+                  id={`visual-${index}`}
+                  value={scene.visualPrompt}
+                  onChange={(event) => updateScene(index, { visualPrompt: event.target.value })}
+                  disabled={busy}
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    className="text-body-sm font-medium text-muted-foreground"
+                    htmlFor={`narration-${index}`}
+                  >
+                    What you will hear (Urdu)
+                  </label>
+                  <WordCounter count={sceneCounts[index]} limit={sceneWordLimit} />
+                </div>
+                <Textarea
+                  id={`narration-${index}`}
+                  value={scene.narrationUr}
+                  onChange={(event) => updateScene(index, { narrationUr: event.target.value })}
+                  disabled={busy}
+                  rows={2}
+                  dir="rtl"
+                  className="urdu resize-none"
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -206,7 +233,7 @@ export default function ReviewPage() {
         </Button>
         <Button
           onClick={handleApprove}
-          disabled={busy || overLimit || limitReached}
+          disabled={busy || sceneProblem || limitReached}
           className="bg-accent-gradient text-white hover:opacity-90 sm:flex-1"
         >
           {approving ? 'Creating video…' : 'Approve & Create Video'}

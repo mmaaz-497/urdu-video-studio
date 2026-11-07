@@ -288,6 +288,30 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /videos/{id}/download:
+    get:
+      summary: Short-lived attachment download URL for a Ready video (owner only)
+      description: >
+        Returns a presigned GET URL (R2) whose response has
+        Content-Disposition attachment with a safe ASCII filename, or, with
+        STORAGE_PROVIDER=local, an HMAC-signed short-lived URL to the backend's
+        /downloads/local endpoint that serves the same header. 404 NOT_FOUND for
+        another student's video; 409 VIDEO_NOT_READY if not Ready.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, filename, expiresInSeconds]
+                properties:
+                  url: { type: string }
+                  filename: { type: string }
+                  expiresInSeconds: { type: integer }
+
   /videos/{id}/retry:
     post:
       tags: [videos]
@@ -384,33 +408,41 @@ components:
         aspectRatio: { type: string, enum: ['16:9', '9:16'] }
         voiceId: { type: string, enum: [male, female] }
 
+    Scene:
+      type: object
+      required: [visualPrompt, narrationUr]
+      properties:
+        visualPrompt: { type: string, description: "English prompt for the video generator; depicts exactly what narrationUr says; never requests on-screen text" }
+        narrationUr: { type: string, description: "Right-to-left Urdu narration for this 5 s scene; <= 12 words; describes what is visible, present tense" }
+
     GeneratedScript:
       type: object
       required: [correctedIdea, title, urduScript, scenes, wordCount, wordLimit]
       properties:
         correctedIdea: { type: string }
         title: { type: string }
-        urduScript: { type: string, description: "Right-to-left Urdu text" }
+        urduScript: { type: string, description: "Per-scene narrations joined in order; display / backward compatibility only" }
         scenes:
           type: array
-          items: { type: string }
+          items: { $ref: '#/components/schemas/Scene' }
           minItems: 1
           maxItems: 3
-          description: "English scene prompts; count = durationSeconds / 5"
-        wordCount: { type: integer, description: "Live word-counter value for the Review screen" }
-        wordLimit: { type: integer, description: "Target ceiling for the chosen duration (12 words per 5s, calibrated)" }
+          description: "count = durationSeconds / 5"
+        wordCount: { type: integer, description: "Words in urduScript (all scenes)" }
+        wordLimit: { type: integer, description: "Whole-script ceiling for the chosen duration (12 words per 5s scene, calibrated); the hard limit is enforced per scene" }
+        sceneWordLimit: { type: integer, description: "Per-scene narration ceiling (12)" }
 
     CreateVideoJobRequest:
       type: object
-      required: [idempotencyKey, correctedIdea, title, urduScript, scenes, durationSeconds, aspectRatio, voiceId]
+      required: [idempotencyKey, correctedIdea, title, scenes, durationSeconds, aspectRatio, voiceId]
       properties:
         idempotencyKey: { type: string, format: uuid }
         correctedIdea: { type: string }
         title: { type: string }
-        urduScript: { type: string }
+        urduScript: { type: string, description: "Optional and ignored; the server derives it from scenes[].narrationUr" }
         scenes:
           type: array
-          items: { type: string }
+          items: { $ref: '#/components/schemas/Scene' }
           minItems: 1
           maxItems: 3
         durationSeconds: { type: integer, enum: [5, 10, 15] }

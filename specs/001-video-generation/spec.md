@@ -31,16 +31,20 @@ download a finished video — with no help from anyone else.
    duration (5, 10, or 15 seconds), an aspect ratio, and a voice — each shown as
    visual option cards — **Then** the "Generate Script" action becomes available.
 2. **Given** a valid idea and selections, **When** the student clicks "Generate
-   Script", **Then** the system returns a corrected idea, a right-to-left Urdu
-   narration script sized to the chosen duration (at most 12 Urdu words per 5
-   seconds), and one scene description per 5 seconds of the chosen duration (1,
-   2, or 3 scenes) — without starting any video/voice generation yet.
-3. **Given** the Review screen, **When** the student edits the script, **Then** a
-   live word counter updates against the target for the chosen duration, and the
-   "Approve & Create Video" action is disabled whenever the script exceeds that
-   target.
-4. **Given** the Review screen, **When** the student edits the script or a scene
-   and clicks regenerate, **Then** a new script/scenes are produced reflecting the
+   Script", **Then** the system returns a corrected idea and exactly one scene per
+   5 seconds of the chosen duration (1, 2, or 3 scenes). Each scene holds BOTH an
+   English visual prompt (for the video generator) AND its own right-to-left Urdu
+   narration (at most 12 Urdu words), written together: the narration describes
+   what the viewer is seeing in that scene (present tense, simple Urdu) while the
+   scenes, read in order, still tell the student's idea as a story, and the visual
+   prompt depicts exactly what that scene's narration says. No scene asks for
+   on-screen text. No video/voice generation is started yet.
+3. **Given** the Review screen, **When** the student edits a scene's narration,
+   **Then** that scene's own live word counter updates against the 12-word
+   per-scene limit, and the "Approve & Create Video" action is disabled whenever
+   any scene's narration exceeds it.
+4. **Given** the Review screen, **When** the student edits a scene and clicks
+   regenerate, **Then** a new script/scenes are produced reflecting the
    edit (still matching the chosen duration's scene count), and nothing expensive
    (clip or voice generation) has started.
 5. **Given** a script within the word-counter target, **When** the student clicks
@@ -222,20 +226,25 @@ it persist on reload, and click "Start Creating" to land on sign-up.
   duration (5, 10, or 15 seconds), an aspect ratio (16:9 or 9:16), and a voice
   (Male or Female, each with a short preview sample) before generating a script.
 - **FR-007**: System MUST, on "Generate Script", produce: a corrected version of
-  the idea, an Urdu narration script sized to the chosen duration (at most
-  12 Urdu words per 5 seconds, calibrated on real TTS — i.e., ≤12 words for 5s, ≤24 for 10s,
-  ≤36 for 15s), and exactly one scene description per 5 seconds of the chosen
-  duration (1, 2, or 3 scenes).
+  the idea and exactly one scene per 5 seconds of the chosen duration (1, 2, or 3
+  scenes). Each scene MUST carry a visual prompt (English, for the video
+  generator) and its own Urdu narration of at most 12 words (calibrated on real
+  TTS, per 5 s scene), written together so that the narration describes what is
+  visible in that scene (present tense, simple Urdu) and the visual prompt depicts
+  exactly what the narration says, while the narrations in order still tell the
+  student's idea as a story. Visual prompts MUST NOT request on-screen text. The
+  system also exposes the narrations joined in order as a single `urduScript` for
+  display and backward compatibility.
 - **FR-008**: System MUST screen every idea for unsafe or inappropriate content
   (violence, adult, hate, self-harm) and reject matches with a polite, friendly
   message instead of producing a script.
-- **FR-009**: System MUST present the corrected idea, the Urdu script (rendered
-  right-to-left) with a live word counter against the target for the chosen
-  duration, and the scenes, all editable by the Student.
+- **FR-009**: System MUST present the corrected idea and each scene as a card
+  showing its visual prompt and its Urdu narration (rendered right-to-left, with
+  a per-scene live word counter against the 12-word limit), all editable by the
+  Student.
 - **FR-010**: System MUST disable the "Approve & Create Video" action whenever
-  the live word counter shows the script exceeds the target for the chosen
-  duration, re-enabling it once the script is shortened (by edit or regeneration)
-  to fit.
+  any scene's word counter shows its narration exceeds the per-scene limit or is
+  empty, re-enabling it once every scene fits (by edit or regeneration).
 - **FR-011**: System MUST let the Student regenerate the script/scenes after
   edits, preserving the scene count required by the chosen duration, and MUST NOT
   start any GPU-based generation (clips or voice) until the Student explicitly
@@ -257,9 +266,12 @@ it persist on reload, and click "Start Creating" to land on sign-up.
   processing state indefinitely.
 - **FR-016**: System MUST detect jobs that exceed a maximum allowed processing
   duration and automatically mark them Failed with a timeout reason.
-- **FR-017**: System MUST, when the spoken narration runs slightly longer than
-  the chosen video duration, attempt to speed up the voice audio by at most 10%
-  to fit it; if it still does not fit after that adjustment, the system MUST mark
+- **FR-017**: System MUST synthesize narration once per scene and fit each
+  scene's narration inside its own 5-second clip (so scene N's voice plays over
+  scene N's clip): when a scene's spoken narration runs slightly longer than 5
+  seconds, attempt to speed up that scene's audio by at most 10%; shorter
+  narration is padded with silence to exactly 5 seconds; the per-scene tracks are
+  concatenated in order. If any scene still does not fit after the speed-up, the system MUST mark
   the job Failed with the reason "Script is too long for the chosen duration —
   please shorten it," and this failure MUST NOT count toward the daily video
   limit.
@@ -275,7 +287,10 @@ it persist on reload, and click "Start Creating" to land on sign-up.
   showing thumbnail, title (derived from their idea), creation date, duration,
   aspect ratio, and status badge (Processing / Ready / Failed).
 - **FR-020**: System MUST let a Student play and download (MP4) any of their own
-  Ready videos.
+  Ready videos. The Download action MUST save a file (never navigate to or resize
+  the player), regardless of whether storage is cross-origin object storage or
+  local disk: the server issues a short-lived, owner-only download URL whose
+  response carries `Content-Disposition: attachment` with a safe ASCII filename.
 - **FR-021**: System MUST let a Student delete any of their own videos that are
   in a terminal state (Ready or Failed); deletion MUST NOT be available while a
   video is Processing.
@@ -330,8 +345,9 @@ it persist on reload, and click "Start Creating" to land on sign-up.
   count of videos/scripts generated today and in total. Owns zero or more Video
   Jobs and zero or more Password Reset Tokens.
 - **Video Job**: One request to turn an idea into a video. Holds the student's raw
-  idea, the LLM-corrected idea, the Urdu narration script, the scene descriptions
-  (1, 2, or 3, matching the chosen duration), chosen duration (5/10/15s), chosen
+  idea, the LLM-corrected idea, the Urdu narration script (the per-scene narrations joined), the scenes
+  (1, 2, or 3, matching the chosen duration, each with a visual prompt and its
+  own Urdu narration), chosen duration (5/10/15s), chosen
   aspect ratio, chosen voice, current status, failure reason (if any), progress
   step, creation and completion timestamps, and the resulting video/thumbnail
   once Ready. The "Draft/Review" phase (idea entry, script generation/editing)
@@ -341,7 +357,8 @@ it persist on reload, and click "Start Creating" to land on sign-up.
   Generating scenes → Adding voice → Finalizing) to one of the two terminal
   states, Ready or Failed.
 - **Scene**: One of the 1–3 ordered 5-second segments belonging to a Video Job
-  (count matches the job's chosen duration), with its own scene description text.
+  (count matches the job's chosen duration), with its own English visual prompt
+  and its own Urdu narration (≤12 words) describing what that scene shows.
 - **Password Reset Token**: A time-limited, single-use token tied to one Student,
   with an expiry timestamp and a used/invalidated flag; a new token invalidates
   any previously outstanding token for the same Student.

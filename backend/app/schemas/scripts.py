@@ -12,10 +12,18 @@ class GenerateScriptRequest(BaseModel):
     voiceId: Literal["male", "female"]
 
 
+class Scene(BaseModel):
+    """One 5 s segment: the English prompt for Wan and the Urdu narration for the same moment."""
+
+    visualPrompt: str
+    narrationUr: str
+
+
 class GeneratedScript(BaseModel):
     correctedIdea: str
     title: str
-    urduScript: str
-    scenes: list[str] = Field(min_length=1, max_length=3)
-    wordCount: int
-    wordLimit: int
+    urduScript: str  # narrations joined in order; display / backward compatibility only
+    scenes: list[Scene] = Field(min_length=1, max_length=3)
+    wordCount: int  # words across all narrations
+    wordLimit: int  # whole-script ceiling for the chosen duration
+    sceneWordLimit: int  # hard per-scene ceiling (enforced on POST /videos)

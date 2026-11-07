@@ -37,3 +37,7 @@ sample-media/
 .DS_Store
 Thumbs.db
 .screenshots/
+
+# Playwright
+/frontend/test-results/
+/frontend/playwright-report/

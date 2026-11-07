@@ -1,7 +1,7 @@
 """Backend client for the RunPod Serverless GPU worker (T089).
 
-Submits one job (all scenes + narration) and polls it to completion via the
-`runpod` SDK. Transient SDK/network errors are retried (3 retries, exponential
+Submits one job (all scenes, each with its own visual prompt and narration) and polls
+it to completion via the `runpod` SDK. Transient SDK/network errors are retried (3 retries, exponential
 backoff, 30s request timeout); on exhaustion we raise a friendly
 AppError("RUNPOD_UNAVAILABLE") and log the real cause.
 """
@@ -62,16 +62,16 @@ def _get_endpoint():
 
 
 def submit_job(
-    scenes: list[str],
+    scenes: list[dict[str, str]],
     aspect_ratio: str,
-    narration: str,
     voice_id: str,
     presigned_put_urls: dict[str, Any],
     frames: int = DEFAULT_FRAMES,
 ):
     """Submits the job and returns the SDK Job handle.
 
-    `presigned_put_urls` = {"clips": [url per scene], "narration": url}.
+    `scenes` = [{"visual_prompt": str, "narration": str}, ...] (one per 5 s scene);
+    `presigned_put_urls` = {"clips": [url per scene], "narrations": [url per scene]}.
     """
     endpoint = _get_endpoint()
     payload = {
@@ -79,7 +79,6 @@ def submit_job(
             "scenes": scenes,
             "aspect_ratio": aspect_ratio,
             "frames": frames,
-            "narration": narration,
             "voice_id": voice_id,
             "presigned_put_urls": presigned_put_urls,
         }
@@ -180,14 +179,13 @@ def wait_for_result(
 
 
 def generate(
-    scenes: list[str],
+    scenes: list[dict[str, str]],
     aspect_ratio: str,
-    narration: str,
     voice_id: str,
     presigned_put_urls: dict[str, Any],
     on_progress: ProgressCallback | None = None,
     on_status: StatusCallback | None = None,
 ) -> dict:
-    """Submit + poll. Returns {"scene_count": int, "narration_duration_seconds": float}."""
-    job = submit_job(scenes, aspect_ratio, narration, voice_id, presigned_put_urls)
+    """Submit + poll. Returns {"scene_count": int, "narration_durations_seconds": [float, ...]}."""
+    job = submit_job(scenes, aspect_ratio, voice_id, presigned_put_urls)
     return wait_for_result(job, on_progress, on_status=on_status)

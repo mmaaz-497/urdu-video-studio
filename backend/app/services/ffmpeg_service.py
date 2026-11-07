@@ -12,6 +12,8 @@ FFMPEG_TIMEOUT_SECONDS = 60
 DURATION_TOLERANCE_SECONDS = 0.05
 
 MAX_NARRATION_SPEEDUP = 1.10  # FR-017
+SCENE_SECONDS = 5.0
+NARRATION_SAMPLE_RATE = 24000
 
 RESOLUTIONS = {"16:9": (1280, 720), "9:16": (720, 1280)}
 
@@ -93,6 +95,49 @@ def normalize_and_concat(clips: list[str], aspect_ratio: str, out_path: str) -> 
         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", out_path,
     ]
+    _run(cmd)
+    return out_path
+
+
+def fit_scene_narrations(
+    narration_paths: list[str],
+    out_path: str,
+    scene_seconds: float = SCENE_SECONDS,
+    max_speedup: float = MAX_NARRATION_SPEEDUP,
+) -> str:
+    """Builds the narration track scene by scene so scene N's voice plays over scene N's clip
+    (FR-017): each narration longer than `scene_seconds` is sped up by at most `max_speedup`
+    (AppError('SCRIPT_TOO_LONG') if it still doesn't fit), shorter ones are padded with
+    silence, every scene is cut to exactly `scene_seconds`, and the scenes are concatenated."""
+    cmd = ["ffmpeg", "-y"]
+    parts = []
+    for i, path in enumerate(narration_paths):
+        duration = _probe_duration(path)
+        speedup = 1.0
+        if duration > scene_seconds:
+            speedup = min(duration / scene_seconds, max_speedup)
+            if duration / speedup > scene_seconds + DURATION_TOLERANCE_SECONDS:
+                logger.warning(
+                    "scene_narration_too_long",
+                    extra={"scene": i + 1, "seconds": duration, "limit": scene_seconds},
+                )
+                raise AppError(
+                    "SCRIPT_TOO_LONG",
+                    "Script is too long for the chosen duration — please shorten it",
+                )
+        chain = [f"atempo={speedup:.4f}"] if speedup != 1.0 else []
+        chain += [
+            f"aresample={NARRATION_SAMPLE_RATE}",
+            "aformat=channel_layouts=mono",
+            f"apad=whole_dur={scene_seconds}",
+            f"atrim=0:{scene_seconds}",
+            "asetpts=N/SR/TB",
+        ]
+        cmd += ["-i", path]
+        parts.append(f"[{i}:a]{','.join(chain)}[a{i}]")
+    joined = "".join(f"[a{i}]" for i in range(len(narration_paths)))
+    filter_complex = ";".join(parts) + f";{joined}concat=n={len(narration_paths)}:v=0:a=1[outa]"
+    cmd += ["-filter_complex", filter_complex, "-map", "[outa]", "-c:a", "pcm_s16le", out_path]
     _run(cmd)
     return out_path
 

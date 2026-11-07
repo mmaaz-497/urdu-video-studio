@@ -1,6 +1,8 @@
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -10,7 +12,12 @@ from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.core.sessions import require_session
 from app.models.video_job import VideoJob as VideoJobModel
-from app.schemas.videos import CreateVideoJobRequest, VideoJobListItem, VideoJobListResponse
+from app.schemas.videos import (
+    CreateVideoJobRequest,
+    VideoDownload,
+    VideoJobListItem,
+    VideoJobListResponse,
+)
 from app.schemas.videos import VideoJob as VideoJobSchema
 from app.services import video_job_service
 from app.services.storage_service import get_storage
@@ -110,6 +117,46 @@ async def get_video(
 ) -> VideoJobSchema:
     job = await _get_owned_job(db, id, student_id)
     return await _to_schema(job)
+
+
+DOWNLOAD_URL_TTL_SECONDS = 60
+_SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _download_filename(job: VideoJobModel) -> str:
+    """ASCII-only attachment name: titles are Urdu, which cannot go in a plain
+    Content-Disposition filename, so fall back to a stable id-based name."""
+    base = _SAFE_NAME_RE.sub("-", job.title.encode("ascii", "ignore").decode()).strip("-._")
+    return f"{base[:60] or 'urdu-video-' + str(job.id)[:8]}.mp4"
+
+
+@router.get("/videos/{id}/download", response_model=VideoDownload)
+async def get_video_download(
+    id: uuid.UUID,
+    db: Session = Depends(get_db),
+    student_id: uuid.UUID = Depends(require_session),
+) -> VideoDownload:
+    job = await _get_owned_job(db, id, student_id)  # same owner-only check as the video itself
+    if job.status != "ready" or not job.video_url:
+        raise AppError("VIDEO_NOT_READY", "This video isn't ready to download yet.")
+    filename = _download_filename(job)
+    url = await get_storage().get_attachment_url(job.video_url, filename, DOWNLOAD_URL_TTL_SECONDS)
+    return VideoDownload(url=url, filename=filename, expiresInSeconds=DOWNLOAD_URL_TTL_SECONDS)
+
+
+@router.get("/downloads/local", include_in_schema=False)
+async def download_local_file(key: str, filename: str, exp: int, sig: str) -> FileResponse:
+    """Serves a local-storage file as an attachment. Authorised by the HMAC-signed, expiring
+    URL issued by GET /videos/{id}/download (the local analogue of an R2 presigned URL)."""
+    from app.services.storage_local import LocalStorageService
+
+    storage = get_storage()
+    path = storage.verify_attachment(key, filename, exp, sig) if isinstance(
+        storage, LocalStorageService
+    ) else None
+    if path is None:
+        raise AppError("NOT_FOUND", "This download link is invalid or has expired.")
+    return FileResponse(path, media_type="video/mp4", filename=filename)
 
 
 @router.delete("/videos/{id}", status_code=204, dependencies=[Depends(require_csrf)])

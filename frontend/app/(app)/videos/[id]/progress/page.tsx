@@ -1,11 +1,12 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Download } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { use, useEffect } from 'react'
 import { toast } from 'sonner'
 
+import { DownloadButton } from '@/components/studio/download-button'
 import { ProgressStepper } from '@/components/studio/progress-stepper'
 import { Button } from '@/components/ui/button'
 import { ApiError, apiClient } from '@/lib/api-client'
@@ -104,12 +105,12 @@ export default function VideoProgressPage({ params }: { params: Promise<{ id: st
             />
           </div>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <Button asChild className="bg-accent-gradient text-white hover:opacity-90">
-              <a href={job.videoUrl} download>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </a>
-            </Button>
+            <DownloadButton
+              videoId={job.id}
+              className="bg-accent-gradient text-white hover:opacity-90"
+            >
+              Download
+            </DownloadButton>
             <Button variant="outline" asChild>
               <Link href="/create">Create another</Link>
             </Button>

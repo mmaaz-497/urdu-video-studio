@@ -1,4 +1,8 @@
+import hashlib
+import hmac
+import time
 from pathlib import Path
+from urllib.parse import urlencode
 
 from app.core.config import get_settings
 
@@ -30,6 +34,27 @@ class LocalStorageService:
 
     async def get_download_url(self, key: str) -> str:
         return f"{PUBLIC_URL_PREFIX}/{key}"
+
+    def _sign(self, key: str, filename: str, exp: int) -> str:
+        secret = get_settings().SESSION_COOKIE_SECRET.encode()
+        msg = f"{key}\n{filename}\n{exp}".encode()
+        return hmac.new(secret, msg, hashlib.sha256).hexdigest()
+
+    async def get_attachment_url(self, key: str, filename: str, expires_in: int) -> str:
+        # Local disk has no presigning: emulate it with an HMAC-signed, expiring URL served
+        # by the backend's /downloads/local route (same-origin under /api, like the static files).
+        self._resolve(key)  # reject traversal early
+        exp = int(time.time()) + expires_in
+        query = urlencode({"key": key, "filename": filename, "exp": exp,
+                           "sig": self._sign(key, filename, exp)})
+        return f"/api/downloads/local?{query}"
+
+    def verify_attachment(self, key: str, filename: str, exp: int, sig: str) -> Path | None:
+        """Returns the file path if the signature is valid, unexpired and the file exists."""
+        if exp < time.time() or not hmac.compare_digest(sig, self._sign(key, filename, exp)):
+            return None
+        path = self._resolve(key)
+        return path if path.is_file() else None
 
     async def get_presigned_put_url(self, key: str, content_type: str) -> str:
         # No presigned-PUT concept locally; callers write directly via upload().

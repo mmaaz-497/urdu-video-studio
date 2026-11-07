@@ -15,16 +15,17 @@ _ASPECT_RATIO_DIRS = {"16:9": "16x9", "9:16": "9x16"}
 
 
 def pick_assets(aspect_ratio: str, scene_count: int, voice_id: str) -> dict:
-    """Returns bundled {"clips": [...], "narration": "..."} file paths for one
-    (aspect_ratio, scene_count, voice_id) combination."""
+    """Returns bundled {"clips": [...], "narrations": [...]} file paths for one
+    (aspect_ratio, scene_count, voice_id) combination: one clip and one narration file per
+    scene (the 5 s sample is reused for every scene, like the real per-scene TTS output)."""
     ar_dir = _ASPECT_RATIO_DIRS[aspect_ratio]
     clips = [str(CLIPS_DIR / ar_dir / f"scene{i}.mp4") for i in range(1, scene_count + 1)]
     for clip in clips:
         if not Path(clip).exists():
             raise FileNotFoundError(f"Missing mock clip: {clip}")
 
-    narration = NARRATION_DIR / f"{voice_id}_{scene_count}.mp3"
+    narration = NARRATION_DIR / f"{voice_id}_1.mp3"
     if not narration.exists():
         raise FileNotFoundError(f"Missing mock narration: {narration}")
 
-    return {"clips": clips, "narration": str(narration)}
+    return {"clips": clips, "narrations": [str(narration)] * scene_count}

@@ -1,9 +1,10 @@
 'use client'
 
-import { AlertTriangle, Download, Loader2, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Loader2, Play, RotateCcw, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 
+import { DownloadButton } from '@/components/studio/download-button'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { VideoJobListItem } from '@/lib/types'
@@ -146,11 +147,12 @@ export function VideoCard({ job, onDelete, onRetry, deleting, retrying, classNam
                 </Link>
               </Button>
               {job.videoUrl && (
-                <Button variant="outline" size="icon" asChild aria-label="Download video">
-                  <a href={job.videoUrl} download>
-                    <Download className="h-4 w-4" />
-                  </a>
-                </Button>
+                <DownloadButton
+                  videoId={job.id}
+                  variant="outline"
+                  size="icon"
+                  label="Download video"
+                />
               )}
             </>
           )}

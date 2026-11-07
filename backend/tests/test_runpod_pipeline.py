@@ -17,8 +17,9 @@ def _body() -> dict:
         "idempotencyKey": str(uuid.uuid4()),
         "correctedIdea": "idea",
         "title": "Test Video",
-        "urduScript": SCRIPT,
-        "scenes": ["A student writing notes in a classroom"],
+        "scenes": [
+            {"visualPrompt": "A student writing notes in a classroom", "narrationUr": SCRIPT}
+        ],
         "durationSeconds": 5,
         "aspectRatio": "16:9",
         "voiceId": "male",
@@ -55,7 +56,7 @@ def runpod_env(monkeypatch):
     monkeypatch.setattr(video_pipeline, "get_storage", lambda: storage)
 
     def _fake_download(url, dest):
-        src = assets["narration"] if "narration" in url else assets["clips"][0]
+        src = assets["narrations"][0] if "narration" in url else assets["clips"][0]
         shutil.copyfile(src, dest)
         return str(dest)
 
@@ -72,7 +73,7 @@ def test_runpod_branch_uses_provider_then_shared_ffmpeg_finalize(
     def _fake_generate(**kwargs):
         calls.update(kwargs)
         kwargs["on_progress"](1)
-        return {"scene_count": 1, "narration_duration_seconds": 4.2}
+        return {"scene_count": 1, "narration_durations_seconds": [4.2]}
 
     monkeypatch.setattr(runpod_provider, "generate", _fake_generate)
     finalize_calls = []
@@ -92,12 +93,14 @@ def test_runpod_branch_uses_provider_then_shared_ffmpeg_finalize(
     assert finalize_calls == [1]
     assert f"videos/{job_id}.mp4" in runpod_env.uploaded
     assert calls["aspect_ratio"] == "16:9" and calls["voice_id"] == "male"
-    assert calls["narration"] == SCRIPT
+    assert calls["scenes"] == [
+        {"visual_prompt": "A student writing notes in a classroom", "narration": SCRIPT}
+    ]
     assert calls["presigned_put_urls"]["clips"][0].startswith("https://r2.test/put/jobs/")
-    assert "ct=audio/wav" in calls["presigned_put_urls"]["narration"]
+    assert "ct=audio/wav" in calls["presigned_put_urls"]["narrations"][0]
     # Raw GPU intermediates are deleted; the final MP4 + thumbnail are kept.
     assert sorted(runpod_env.deleted) == [
-        f"jobs/{job_id}/narration.wav",
+        f"jobs/{job_id}/narration1.wav",
         f"jobs/{job_id}/scene1.mp4",
     ]
     assert f"videos/{job_id}_thumb.jpg" in runpod_env.uploaded
@@ -109,7 +112,7 @@ def test_cleanup_failure_never_fails_the_job(auth_client, db_session, runpod_env
     monkeypatch.setattr(
         runpod_provider,
         "generate",
-        lambda **kw: {"scene_count": 1, "narration_duration_seconds": 4.2},
+        lambda **kw: {"scene_count": 1, "narration_durations_seconds": [4.2]},
     )
 
     async def _boom(key):
@@ -147,7 +150,7 @@ def test_measured_narration_too_long_fails_with_script_too_long(
     monkeypatch.setattr(
         runpod_provider,
         "generate",
-        lambda **kw: {"scene_count": 1, "narration_duration_seconds": 9.0},
+        lambda **kw: {"scene_count": 1, "narration_durations_seconds": [9.0]},
     )
     job_id = client.post("/videos", json=_body(), headers=headers).json()["id"]
     run_job(job_id)
@@ -191,13 +194,13 @@ def test_wait_for_result_retries_then_returns_output_and_reports_progress():
             {"status": "IN_PROGRESS", "output": "scene 1/2 done"},
             {
                 "status": "COMPLETED",
-                "output": {"scene_count": 2, "narration_duration_seconds": 8.1},
+                "output": {"scene_count": 2, "narration_durations_seconds": [4.0, 4.1]},
             },
         ]
     )
     seen = []
     out = runpod_provider.wait_for_result(job, seen.append, sleep=lambda s: None)
-    assert out["narration_duration_seconds"] == 8.1
+    assert out["narration_durations_seconds"] == [4.0, 4.1]
     assert seen == [1]
 
 
@@ -222,7 +225,10 @@ def test_queue_status_reported_and_no_scene_progress_until_in_progress():
         [
             {"status": "IN_QUEUE", "output": "scene 1/1 done"},  # stale text must be ignored
             {"status": "IN_PROGRESS", "output": "scene 1/1 done"},
-            {"status": "COMPLETED", "output": {"scene_count": 1, "narration_duration_seconds": 4}},
+            {
+                "status": "COMPLETED",
+                "output": {"scene_count": 1, "narration_durations_seconds": [4]},
+            },
         ]
     )
     scenes, statuses = [], []

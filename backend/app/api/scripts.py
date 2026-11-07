@@ -8,7 +8,7 @@ from app.core.db import get_db
 from app.core.errors import AppError
 from app.core.redis_client import call_with_timeout, get_redis
 from app.core.sessions import require_session
-from app.schemas.scripts import GeneratedScript, GenerateScriptRequest
+from app.schemas.scripts import GeneratedScript, GenerateScriptRequest, Scene
 from app.services import llm_service, usage_service
 
 router = APIRouter()
@@ -62,9 +62,13 @@ async def create_script(
             correctedIdea=output.corrected_idea,
             title=output.title,
             urduScript=output.urdu_script,
-            scenes=output.scenes,
+            scenes=[
+                Scene(visualPrompt=sc.visual_prompt, narrationUr=sc.narration_ur)
+                for sc in output.scenes
+            ],
             wordCount=llm_service.word_count(output.urdu_script),
             wordLimit=llm_service.word_limit_for(payload.durationSeconds),
+            sceneWordLimit=llm_service.WORDS_PER_5S_MAX,
         )
         await call_with_timeout(redis.set(key, response.model_dump_json(), ex=_CACHE_TTL_SECONDS))
         return response

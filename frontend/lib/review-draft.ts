@@ -14,7 +14,10 @@ export function readDraft(): ReviewDraft | null {
   const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY)
   if (!raw) return null
   try {
-    return JSON.parse(raw) as ReviewDraft
+    const draft = JSON.parse(raw) as ReviewDraft
+    // A draft saved before per-scene narration holds scenes as plain strings: unusable.
+    const valid = Array.isArray(draft.scenes) && draft.scenes.every((s) => typeof s === 'object' && s !== null)
+    return valid ? draft : null
   } catch {
     return null
   }

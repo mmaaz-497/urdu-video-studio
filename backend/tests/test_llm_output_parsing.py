@@ -7,11 +7,14 @@ import redis as redis_sync
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.services import llm_service, moderation_service
-from app.services.llm_service import ScriptGenerationOutput
+from app.services.llm_service import SceneOutput, ScriptGenerationOutput
 
 VALID_SCRIPT = " ".join(["لفظ"] * 11)  # 11 "words" -> under the 1-scene (5s) 12-word hard limit
-WRONG_SCENE_COUNT_SCRIPT = " ".join(["لفظ"] * 14)
 OVER_LIMIT_SCRIPT = " ".join(["لفظ"] * 20)  # 20 "words" -> over the 1-scene (5s) 12-word hard limit
+
+
+def _scene(narration: str = VALID_SCRIPT, visual: str = "A student writing notes in a classroom"):
+    return SceneOutput(visual_prompt=visual, narration_ur=narration)
 
 
 def _body(**overrides) -> dict:
@@ -35,8 +38,7 @@ def _valid_output() -> ScriptGenerationOutput:
     return ScriptGenerationOutput(
         corrected_idea="مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے",
         title="Test Video",
-        urdu_script=VALID_SCRIPT,
-        scenes=["A student writing notes in a classroom"],
+        scenes=[_scene()],
     )
 
 
@@ -45,8 +47,7 @@ def _invalid_output() -> ScriptGenerationOutput:
     return ScriptGenerationOutput(
         corrected_idea="مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے",
         title="Test Video",
-        urdu_script=WRONG_SCENE_COUNT_SCRIPT,
-        scenes=["Scene one", "Scene two"],
+        scenes=[_scene(), _scene()],
     )
 
 
@@ -69,9 +70,13 @@ def test_valid_structured_output_accepted(auth_client, monkeypatch):
     assert resp.status_code == 201
     body = resp.json()
     assert body["correctedIdea"] == "مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے"
-    assert body["scenes"] == ["A student writing notes in a classroom"]
+    assert body["scenes"] == [
+        {"visualPrompt": "A student writing notes in a classroom", "narrationUr": VALID_SCRIPT}
+    ]
+    assert body["urduScript"] == VALID_SCRIPT  # joined narrations, kept for display
     assert body["wordCount"] == 11
     assert body["wordLimit"] == 12
+    assert body["sceneWordLimit"] == 12
 
 
 def test_invalid_output_retries_once_then_fails(auth_client, monkeypatch):
@@ -91,8 +96,7 @@ def test_mixed_script_idea_retries_once_then_succeeds(auth_client, monkeypatch):
     mixed_output = ScriptGenerationOutput(
         corrected_idea="Mera idea hai ke یہ ایک ویڈیو ہے",  # 3 Latin words -> over allowance
         title="Test Video",
-        urdu_script=VALID_SCRIPT,
-        scenes=["A student writing notes in a classroom"],
+        scenes=[_scene()],
     )
     run_mock = AsyncMock(side_effect=[_FakeResult(mixed_output), _FakeResult(_valid_output())])
     monkeypatch.setattr(llm_service.Runner, "run", run_mock)
@@ -109,8 +113,7 @@ def test_mixed_script_idea_still_mixed_after_retry_fails(auth_client, monkeypatc
     mixed_output = ScriptGenerationOutput(
         corrected_idea="Mera idea hai ke یہ ایک ویڈیو ہے",
         title="Test Video",
-        urdu_script=VALID_SCRIPT,
-        scenes=["A student writing notes in a classroom"],
+        scenes=[_scene()],
     )
     run_mock = AsyncMock(return_value=_FakeResult(mixed_output))
     monkeypatch.setattr(llm_service.Runner, "run", run_mock)
@@ -167,8 +170,7 @@ def test_over_limit_output_is_trimmed_not_failed(auth_client, monkeypatch):
     over_limit_output = ScriptGenerationOutput(
         corrected_idea="مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے",
         title="Test Video",
-        urdu_script=OVER_LIMIT_SCRIPT,
-        scenes=["A student writing notes in a classroom"],
+        scenes=[_scene(OVER_LIMIT_SCRIPT)],
     )
     run_mock = AsyncMock(return_value=_FakeResult(over_limit_output))
     monkeypatch.setattr(llm_service.Runner, "run", run_mock)
@@ -177,7 +179,7 @@ def test_over_limit_output_is_trimmed_not_failed(auth_client, monkeypatch):
 
     assert resp.status_code == 201
     body = resp.json()
-    assert body["wordCount"] <= body["wordLimit"]
+    assert body["wordCount"] <= body["sceneWordLimit"]
     assert run_mock.await_count == 2  # one retry attempted before trimming
 
 
@@ -186,8 +188,7 @@ def test_scene_prompts_strip_on_screen_text_requests(auth_client, monkeypatch):
     output_with_overlay = ScriptGenerationOutput(
         corrected_idea="مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے",
         title="Test Video",
-        urdu_script=VALID_SCRIPT,
-        scenes=['A classroom; overlay text: "Save Water" is shown on screen'],
+        scenes=[_scene(visual='A classroom; overlay text: "Save Water" is shown on screen')],
     )
     monkeypatch.setattr(
         llm_service.Runner, "run", AsyncMock(return_value=_FakeResult(output_with_overlay))
@@ -196,7 +197,7 @@ def test_scene_prompts_strip_on_screen_text_requests(auth_client, monkeypatch):
     resp = client.post("/scripts", json=_body(), headers=headers)
 
     assert resp.status_code == 201
-    scene = resp.json()["scenes"][0]
+    scene = resp.json()["scenes"][0]["visualPrompt"]
     assert "overlay" not in scene.lower()
     assert "Save Water" not in scene
 
@@ -220,3 +221,25 @@ def test_concurrent_duplicate_while_pending_gets_425(auth_client):
     assert usage_after == usage_before
 
     sync_redis.delete(pending_key)
+
+
+def test_over_limit_scene_is_trimmed_per_scene_and_retry_names_the_scene(auth_client, monkeypatch):
+    """The limit is per scene: only the offending scene is trimmed, the other is untouched,
+    and the retry feedback tells the model which scene was too long."""
+    client, headers, _student = auth_client
+    output = ScriptGenerationOutput(
+        corrected_idea="مجھے اس موضوع پر ایک اچھا آئیڈیا چاہیے",
+        title="Test Video",
+        scenes=[_scene(VALID_SCRIPT), _scene(OVER_LIMIT_SCRIPT)],
+    )
+    run_mock = AsyncMock(return_value=_FakeResult(output))
+    monkeypatch.setattr(llm_service.Runner, "run", run_mock)
+
+    resp = client.post("/scripts", json=_body(durationSeconds=10), headers=headers)
+
+    assert resp.status_code == 201
+    scenes = resp.json()["scenes"]
+    assert scenes[0]["narrationUr"] == VALID_SCRIPT
+    assert len(scenes[1]["narrationUr"].split()) == 12
+    assert "Scene 2" in run_mock.await_args_list[1].args[1]
+    assert "Scene 1" not in run_mock.await_args_list[1].args[1]

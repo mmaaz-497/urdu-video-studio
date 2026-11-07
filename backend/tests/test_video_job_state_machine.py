@@ -15,8 +15,9 @@ def _video_body(**overrides) -> dict:
         "idempotencyKey": str(uuid.uuid4()),
         "correctedIdea": "Ek acha idea",
         "title": "Test Video",
-        "urduScript": SHORT_SCRIPT,
-        "scenes": ["A student writing notes in a classroom"],
+        "scenes": [
+            {"visualPrompt": "A student writing notes in a classroom", "narrationUr": SHORT_SCRIPT}
+        ],
         "durationSeconds": 5,
         "aspectRatio": "16:9",
         "voiceId": "male",
@@ -152,4 +153,4 @@ def test_stale_job_sweeper_marks_timed_out_jobs_failed(auth_client, db_session):
 def test_mock_provider_pick_assets_returns_matching_counts():
     assets = pick_assets("16:9", 2, "male")
     assert len(assets["clips"]) == 2
-    assert assets["narration"].endswith("male_2.mp3")
+    assert len(assets["narrations"]) == 2  # one narration file per scene

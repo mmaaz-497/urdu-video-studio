@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.models.video_job import VideoJob
+from app.schemas.scripts import Scene
 from app.schemas.videos import CreateVideoJobRequest
 from app.services import llm_service, usage_service
 
@@ -30,16 +31,19 @@ def create_job(
         return existing, False
 
     scene_count = payload.durationSeconds // 5
-    word_too_long = (
-        len(payload.scenes) != scene_count
-        or llm_service.word_count(payload.urduScript) > llm_service.word_limit_for(
-            payload.durationSeconds
-        )
-    )
-    if word_too_long:
-        raise AppError(
-            "SCRIPT_TOO_LONG", "Script is too long for the chosen duration — please shorten it"
-        )
+    if len(payload.scenes) != scene_count:
+        raise AppError("VALIDATION_ERROR", f"Exactly {scene_count} scene(s) are required.")
+    for scene in payload.scenes:
+        words = llm_service.word_count(scene.narrationUr)
+        if words == 0 or not scene.visualPrompt.strip():
+            raise AppError(
+                "VALIDATION_ERROR", "Every scene needs a visual prompt and a narration."
+            )
+        if words > llm_service.WORDS_PER_5S_MAX:
+            raise AppError(
+                "SCRIPT_TOO_LONG",
+                "Script is too long for the chosen duration — please shorten it",
+            )
 
     if not usage_service.try_increment_video_count(db, student_id):
         db.commit()
@@ -56,8 +60,8 @@ def create_job(
         raw_idea=payload.correctedIdea,
         corrected_idea=payload.correctedIdea,
         title=payload.title,
-        urdu_script=payload.urduScript,
-        scenes=payload.scenes,
+        urdu_script=" ".join(s.narrationUr.strip() for s in payload.scenes),
+        scenes=[s.model_dump() for s in payload.scenes],
         duration_seconds=payload.durationSeconds,
         aspect_ratio=payload.aspectRatio,
         voice_id=payload.voiceId,
@@ -68,6 +72,15 @@ def create_job(
     db.commit()
     db.refresh(job)
     return job, True
+
+
+def scenes_of(job: VideoJob) -> list[Scene]:
+    """Typed scenes of a job. Rows from before per-scene narration hold plain strings (a
+    visual prompt only); they are read with an empty narration and cannot be retried."""
+    return [
+        Scene(visualPrompt=s, narrationUr="") if isinstance(s, str) else Scene(**s)
+        for s in job.scenes
+    ]
 
 
 def get_job(db: Session, job_id: uuid.UUID) -> VideoJob | None:
@@ -124,12 +137,19 @@ def delete(db: Session, job: VideoJob) -> None:
 def retry(db: Session, job: VideoJob) -> tuple[VideoJob, bool]:
     if job.status != "failed":
         raise AppError("RETRY_NOT_ALLOWED", "Only failed videos can be retried.")
+    scenes = scenes_of(job)
+    if any(not s.narrationUr.strip() for s in scenes):
+        raise AppError(
+            "RETRY_NOT_ALLOWED",
+            "This video was made with an older version and can't be retried. "
+            "Please create a new one.",
+        )
     payload = CreateVideoJobRequest(
         idempotencyKey=uuid.uuid4(),
         correctedIdea=job.corrected_idea,
         title=job.title,
         urduScript=job.urdu_script,
-        scenes=job.scenes,
+        scenes=scenes,
         durationSeconds=job.duration_seconds,
         aspectRatio=job.aspect_ratio,
         voiceId=job.voice_id,

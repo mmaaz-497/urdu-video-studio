@@ -48,8 +48,8 @@ constitution v2.0.0 has a single role.
 | `raw_idea` | text | NOT NULL, 10–500 chars (FR-005) |
 | `corrected_idea` | text | NOT NULL |
 | `title` | text | NOT NULL — derived from `corrected_idea` |
-| `urdu_script` | text | NOT NULL |
-| `scenes` | JSONB (array of text) | NOT NULL; length MUST equal `duration_seconds / 5` |
+| `urdu_script` | text | NOT NULL — the per-scene narrations joined in order (derived server-side; display/back-compat only) |
+| `scenes` | JSONB (array of `{visualPrompt, narrationUr}`) | NOT NULL; length MUST equal `duration_seconds / 5`; each `narrationUr` non-empty and ≤12 words. No migration: the column was already JSONB. Rows created before this change hold plain strings (visual prompt only); they are read as `{visualPrompt: s, narrationUr: ""}` and cannot be retried |
 | `duration_seconds` | smallint | NOT NULL; CHECK IN (5, 10, 15) |
 | `aspect_ratio` | text | NOT NULL; CHECK IN ('16:9', '9:16') |
 | `voice_id` | text | NOT NULL; CHECK IN ('male', 'female') |

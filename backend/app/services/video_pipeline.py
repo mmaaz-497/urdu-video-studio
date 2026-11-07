@@ -101,28 +101,33 @@ def _run_mock(db, job) -> None:
     time.sleep(MOCK_STEP_DELAY_SECONDS)
 
     with tempfile.TemporaryDirectory(prefix=f"job-{job.id}-") as tmp:
-        _finalize(db, job, assets["clips"], assets["narration"], Path(tmp))
+        _finalize(db, job, assets["clips"], assets["narrations"], Path(tmp))
 
 
 def _finalize(
     db,
     job,
     clips: list[str],
-    narration: str,
+    narrations: list[str],
     tmp_path: Path,
     intermediate_keys: list[str] | None = None,
 ) -> None:
-    """FFmpeg assemble + upload + mark ready, then best-effort delete of the job's raw
+    """FFmpeg assemble (one narration file per scene, each fitted into its own 5 s clip) +
+    upload + mark ready, then best-effort delete of the job's raw
     intermediate storage keys. Shared by the mock and runpod paths (the mock path
     writes no intermediates to storage, so it passes none)."""
     video_job_service.mark_status(db, job.id, "finalizing")
     concat_path = str(tmp_path / "concat.mp4")
+    narration_track_path = str(tmp_path / "narration_track.wav")
     narrated_path = str(tmp_path / "narrated.mp4")
     final_path = str(tmp_path / "final.mp4")
     thumb_path = str(tmp_path / "thumb.jpg")
 
     ffmpeg_service.normalize_and_concat(clips, job.aspect_ratio, concat_path)
-    ffmpeg_service.attach_narration(concat_path, narration, job.duration_seconds, narrated_path)
+    ffmpeg_service.fit_scene_narrations(narrations, narration_track_path)
+    ffmpeg_service.attach_narration(
+        concat_path, narration_track_path, job.duration_seconds, narrated_path
+    )
     ffmpeg_service.hard_cap_duration(narrated_path, job.duration_seconds, final_path)
     ffmpeg_service.generate_thumbnail(final_path, thumb_path)
 
@@ -174,15 +179,25 @@ def _run_runpod(db, job) -> None:
         )
 
     scene_count = job.progress_total_scenes
+    scenes = video_job_service.scenes_of(job)
+    if len(scenes) != scene_count or any(not s.narrationUr.strip() for s in scenes):
+        # Rows from before per-scene narration have nothing to speak: fail clearly, spend no GPU.
+        raise AppError(
+            "VALIDATION_ERROR",
+            "This video was made with an older version. Please create a new one.",
+        )
     storage = get_storage()
     video_job_service.mark_status(db, job.id, "preparing")
 
     clip_keys = [f"jobs/{job.id}/scene{i}.mp4" for i in range(1, scene_count + 1)]
-    narration_key = f"jobs/{job.id}/narration.wav"
+    narration_keys = [f"jobs/{job.id}/narration{i}.wav" for i in range(1, scene_count + 1)]
     put_urls = {
         "clips": [_storage_call(storage.get_presigned_put_url(k, "video/mp4")) for k in clip_keys],
-        "narration": _storage_call(storage.get_presigned_put_url(narration_key, "audio/wav")),
+        "narrations": [
+            _storage_call(storage.get_presigned_put_url(k, "audio/wav")) for k in narration_keys
+        ],
     }
+
 
     # progress_current_scene=None means "queued at RunPod, waiting for a GPU worker"; it becomes
     # 0 (rendering scene 1) only once RunPod reports IN_PROGRESS.
@@ -198,25 +213,24 @@ def _run_runpod(db, job) -> None:
         )
 
     result = runpod_provider.generate(
-        scenes=list(job.scenes),
+        scenes=[{"visual_prompt": s.visualPrompt, "narration": s.narrationUr} for s in scenes],
         aspect_ratio=job.aspect_ratio,
-        narration=job.urdu_script,
         voice_id=job.voice_id,
         presigned_put_urls=put_urls,
         on_progress=_on_progress,
         on_status=_on_status,
     )
-    narration_seconds = float(result.get("narration_duration_seconds") or 0)
+    durations = [float(d) for d in result.get("narration_durations_seconds") or []]
+    if len(durations) != scene_count:
+        logger.error("runpod_bad_narration_durations", extra={"result_keys": list(result)})
+        raise AppError("RUNPOD_UNAVAILABLE", "Couldn't generate your video. Please try again.")
     logger.info(
         "runpod_job_generated",
-        extra={
-            "job_id": str(job.id),
-            "narration_seconds": narration_seconds,
-            "target_seconds": job.duration_seconds,
-        },
+        extra={"job_id": str(job.id), "narration_seconds": durations},
     )
-    if narration_seconds > job.duration_seconds * ffmpeg_service.MAX_NARRATION_SPEEDUP:
-        # Measured by the worker: it can't fit even with the allowed atempo speed-up.
+    limit = ffmpeg_service.SCENE_SECONDS * ffmpeg_service.MAX_NARRATION_SPEEDUP
+    if any(d > limit for d in durations):
+        # Measured by the worker: a scene can't fit its 5 s clip even with the allowed speed-up.
         raise AppError(
             "SCRIPT_TOO_LONG", "Script is too long for the chosen duration — please shorten it"
         )
@@ -228,7 +242,8 @@ def _run_runpod(db, job) -> None:
             _download(_storage_call(storage.get_download_url(k)), tmp_path / f"scene{i}.mp4")
             for i, k in enumerate(clip_keys, start=1)
         ]
-        narration = _download(
-            _storage_call(storage.get_download_url(narration_key)), tmp_path / "narration.wav"
-        )
-        _finalize(db, job, clips, narration, tmp_path, [*clip_keys, narration_key])
+        narrations = [
+            _download(_storage_call(storage.get_download_url(k)), tmp_path / f"narration{i}.wav")
+            for i, k in enumerate(narration_keys, start=1)
+        ]
+        _finalize(db, job, clips, narrations, tmp_path, [*clip_keys, *narration_keys])

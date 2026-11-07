@@ -70,6 +70,21 @@ class R2StorageService:
             ExpiresIn=_PRESIGNED_URL_EXPIRY_SECONDS,
         )
 
+    async def get_attachment_url(self, key: str, filename: str, expires_in: int) -> str:
+        # R2 signs the response-header override into the URL (SigV4), so the browser is
+        # told to save the file even though the URL is cross-origin and `<a download>` is ignored.
+        return await self._call_with_retry(
+            self._client.generate_presigned_url,
+            "get_object",
+            Params={
+                "Bucket": self._bucket,
+                "Key": key,
+                "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                "ResponseContentType": "video/mp4",
+            },
+            ExpiresIn=expires_in,
+        )
+
     async def get_presigned_put_url(self, key: str, content_type: str) -> str:
         return await self._call_with_retry(
             self._client.generate_presigned_url,

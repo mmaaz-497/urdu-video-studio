@@ -241,6 +241,23 @@ real generated videos through the identical API/DB/UI surface used in mock mode.
 
 ---
 
+## Phase 9: Revision 2026-11-07 — Per-scene narration sync + attachment download
+
+**Purpose**: Narration must describe what each scene shows (spec FR-007/FR-009/FR-010/FR-017,
+plan.md "Design Revision 2026-11-07"), and Download must save a file instead of expanding the
+player (FR-020). Spec/plan/contract/data-model updated first.
+
+- [X] T096 Spec, plan, tasks, `contracts/openapi.yaml`, `data-model.md` updated for per-scene `{visualPrompt, narrationUr}` and `GET /videos/{id}/download`
+- [X] T097 `backend/app/services/llm_service.py` + `schemas/scripts.py` + `api/scripts.py` — structured output `scenes[]={visual_prompt, narration_ur}`; per-scene `WORDS_PER_5S_MAX`; per-scene retry-with-feedback + sentence-boundary trim; Roman-Urdu checks on idea and narrations; joined `urdu_script`
+- [X] T098 `backend/app/schemas/videos.py`, `services/video_job_service.py`, `models/video_job.py` — scene objects in the job payload; server-derived `urdu_script`; per-scene validation; legacy string rows normalised (no migration, JSONB)
+- [X] T099 `gpu-worker/handler.py` + `backend/app/services/runpod_provider.py` — per-scene OmniVoice synthesis, `narrations[]` PUT URLs, `narration_durations_seconds[]` output (**worker image rebuild required**)
+- [X] T099a `backend/app/services/ffmpeg_service.py` + `video_pipeline._finalize` + `mock_provider` — per-scene fit (atempo ≤ `MAX_NARRATION_SPEEDUP`, silence pad to 5 s) and concat; mock follows the same path
+- [X] T099b `frontend` Review page — per-scene cards (visual prompt + RTL editable narration + per-scene word counter); Approve disabled if any scene is over limit/empty
+- [X] T100 Download root cause confirmed by Playwright reproduction (cross-origin `<a download>` ignored → navigation to raw MP4), then `GET /videos/{id}/download` (R2 `ResponseContentDisposition`, SigV4; local HMAC-signed `/downloads/local`), shared `DownloadButton` on the progress page and My Videos card
+- [X] T101 Tests: updated the existing tests that break (scene shape, `_finalize`, runpod payload) + Playwright `frontend/e2e/download.spec.ts` (real download event, `.mp4` saved, player size unchanged)
+
+---
+
 ## Phase 8: Production Deployment (Final Phase)
 
 **Purpose**: Ship the whole stack on one VPS behind Caddy with automatic HTTPS.

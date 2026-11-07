@@ -168,6 +168,45 @@ model weights — a fundamentally different runtime and deploy cadence from the
 lightweight FastAPI backend/RQ worker. `infra/` centralizes the Docker Compose
 and Caddy configuration shared across the deployable services.
 
+## Design Revision 2026-11-07: per-scene narration and attachment downloads
+
+**Problem 1 — narration was not synced to visuals.** One `urdu_script` explained the
+idea while separate English scene prompts showed something else, with one TTS file laid
+over the whole video. **Decision:** the unit of generation is the *scene*.
+
+- **Data contract**: `scenes[] = {visualPrompt, narrationUr}` (API camelCase). `urdu_script`
+  stays as the narrations joined in order (derived server-side, display/back-compat). The
+  `video_jobs.scenes` column is already JSONB, so **no migration**; legacy string rows are
+  normalised on read and are not retryable (their narration cannot be recovered).
+- **LLM** (`llm_service.py`): one structured output with `scenes[].{visual_prompt,
+  narration_ur}` written together; narration = what is visible, present tense, simple Urdu;
+  the visual prompt depicts exactly that narration; no on-screen text. The limit
+  `WORDS_PER_5S_MAX` (12) is enforced **per scene**; the existing retry-with-feedback (names
+  the offending scenes) and sentence-boundary trim now run per scene; Roman-Urdu (Latin
+  letter) checks apply to `corrected_idea` and every `narration_ur`.
+- **Review UI**: one card per scene (visual prompt + RTL editable narration + its own word
+  counter); Approve is disabled if any scene is over limit/empty. Approval gate unchanged: no
+  GPU spend before approval.
+- **GPU worker**: job input `scenes[] = {visual_prompt, narration}`; presigned PUT URLs
+  `clips[]` and `narrations[]` (one per scene); OmniVoice runs once per scene (model loaded once,
+  released after); output `narration_durations_seconds[]`. **This changes the worker contract,
+  so the worker image must be rebuilt and the endpoint updated** (backend and worker ship together).
+- **Assembly** (`ffmpeg_service.build_scene_narration_track`): each scene's narration is
+  sped up by at most `MAX_NARRATION_SPEEDUP` (1.10) if longer than 5 s, padded with silence to
+  exactly 5 s, then all scenes are concatenated; the track is muxed over the concatenated clips.
+  A scene that still does not fit → `SCRIPT_TOO_LONG` (unchanged failure semantics). The mock
+  provider uses the same path with one bundled narration per scene.
+
+**Problem 2 — Download expanded the player.** Root cause (confirmed with Playwright, see
+tasks T100): the HTML `download` attribute is ignored for cross-origin URLs, and the R2
+presigned URL is cross-origin, so the click navigated the tab to the raw MP4 and the browser's
+built-in video viewer opened. **Decision:** `GET /videos/{id}/download` (owner-only, same
+auth as the video) returns a short-lived URL whose response carries
+`Content-Disposition: attachment; filename="<safe-ascii>.mp4"` — R2 presign with
+`ResponseContentDisposition` (SigV4); local storage returns an HMAC-signed, expiring URL to a
+backend endpoint serving a `FileResponse` attachment. The button is a real `<button>`: it fetches
+the URL then clicks a hidden anchor; the player element is never touched.
+
 ## Known Risks
 
 - **`WORDS_PER_5S_MAX` (words-per-5-seconds narration limit, `backend/app/services/llm_service.py`) was calibrated against real OmniVoice output on 2026-11-05: it is now `12` (previously an uncalibrated estimate of 15, set when Phase 3 ran entirely in `VIDEO_PROVIDER=mock`).** Measured speech rate on the two preset voices: male mean 2.62 words/s (min 2.42), female mean 2.58 words/s (min 2.26). At 12 words per 5 s scene, mean speech takes ~4.6–4.7 s and even the slowest measured sample takes ~5.3 s, so narration fits without speed-up in the normal case and the 1.10× `atempo` (5.5 s) is only a rare safety net. (`scripts/calibrate_words.py` recommended 13, which would rely on `atempo` for most jobs and sit near the `SCRIPT_TOO_LONG` edge, so 12 was chosen deliberately.) The original risk text follows for context: This constant drives the `wordLimit` shown to students and the hard gate enforced on `POST /videos`. If it's wrong, every real (`VIDEO_PROVIDER=runpod`) job fails systematically: too generous and OmniVoice's real narration will routinely exceed the 10% `atempo` speedup budget, landing jobs in `SCRIPT_TOO_LONG`; too strict and scripts are needlessly short. Re-measure if the voices, the TTS model, or the sentence style change — see research.md A9.

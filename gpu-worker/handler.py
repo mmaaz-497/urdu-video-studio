@@ -2,18 +2,19 @@
 
 Job input (built by backend/app/services/runpod_provider.py):
 {
-  "scenes": ["english prompt", ...],           # 1-3 prompts
-  "aspect_ratio": "16:9" | "9:16",
-  "narration": "<Urdu script>",
+  "scenes": [{"visual_prompt": "english prompt", "narration": "<Urdu text for this scene>"}, ...],
+  "aspect_ratio": "16:9" | "9:16",              # 1-3 scenes
   "voice_id": "male" | "female",
   "seed": 123,                                  # optional
   "presigned_put_urls": {
       "clips": ["https://...", ...],            # one per scene, Content-Type video/mp4
-      "narration": "https://..."                # Content-Type audio/wav
+      "narrations": ["https://...", ...]        # one per scene, Content-Type audio/wav
   }
 }
+OmniVoice runs once per scene so scene N's voice is its own file (the backend fits each file
+into its own 5 s clip).
 Job output:
-  {"scene_count": N, "narration_duration_seconds": float}
+  {"scene_count": N, "narration_durations_seconds": [float, ...]}   # one per scene
 On failure returns {"error": "<message>"} (RunPod marks the job FAILED) rather than crashing.
 """
 
@@ -277,17 +278,24 @@ def _r2_error_detail(r: "requests.Response") -> str:
 
 
 # ---------------------------------------------------------------- handler
-def _validate(inp: dict) -> tuple[list[str], tuple[int, int], dict]:
+def _validate(inp: dict) -> tuple[list[dict], tuple[int, int], dict]:
     scenes = inp.get("scenes")
     if not isinstance(scenes, list) or not 1 <= len(scenes) <= MAX_SCENES:
-        raise JobError(f"scenes must be a list of 1-{MAX_SCENES} prompts")
+        raise JobError(f"scenes must be a list of 1-{MAX_SCENES} scene objects")
+    for i, scene in enumerate(scenes, start=1):
+        if (
+            not isinstance(scene, dict)
+            or not str(scene.get("visual_prompt", "")).strip()
+            or not str(scene.get("narration", "")).strip()
+        ):
+            raise JobError(f"scene {i} needs a non-empty visual_prompt and narration")
     if inp.get("aspect_ratio") not in RESOLUTIONS:
         raise JobError("aspect_ratio must be '16:9' or '9:16'")
     urls = inp.get("presigned_put_urls") or {}
-    if len(urls.get("clips", [])) != len(scenes) or not urls.get("narration"):
-        raise JobError("presigned_put_urls must hold one clip URL per scene plus narration")
-    if not inp.get("narration") or inp.get("voice_id") not in ("male", "female"):
-        raise JobError("narration text and voice_id (male|female) are required")
+    if len(urls.get("clips", [])) != len(scenes) or len(urls.get("narrations", [])) != len(scenes):
+        raise JobError("presigned_put_urls must hold one clip URL and one narration URL per scene")
+    if inp.get("voice_id") not in ("male", "female"):
+        raise JobError("voice_id (male|female) is required")
     return scenes, RESOLUTIONS[inp["aspect_ratio"]], urls
 
 
@@ -303,9 +311,9 @@ def handler(job: dict) -> dict:
         with tempfile.TemporaryDirectory(prefix="job-") as tmp:
             tmp_dir = Path(tmp)
             clip_paths: list[Path] = []
-            for i, prompt in enumerate(scenes):
+            for i, scene in enumerate(scenes):
                 clip = tmp_dir / f"scene{i + 1}.mp4"
-                render_scene(prompt, width, height, seed + i, clip, frames)
+                render_scene(scene["visual_prompt"], width, height, seed + i, clip, frames)
                 clip_paths.append(clip)
                 runpod.serverless.progress_update(job, f"scene {i + 1}/{len(scenes)} done")
 
@@ -313,21 +321,24 @@ def handler(job: dict) -> dict:
             free_comfy_memory()
             from tts_omnivoice.infer import release_model, synthesize
 
+            # One OmniVoice pass per scene (model loaded once, released after the last).
+            narrations = []
             try:
-                narration = synthesize(
-                    inp["narration"], inp["voice_id"], str(tmp_dir / "narration.wav")
-                )
+                for i, scene in enumerate(scenes):
+                    wav = str(tmp_dir / f"narration{i + 1}.wav")
+                    narrations.append(synthesize(scene["narration"], inp["voice_id"], wav))
             finally:
                 release_model()
             runpod.serverless.progress_update(job, "narration done")
 
             for clip, url in zip(clip_paths, urls["clips"], strict=True):
                 put_file(url, clip, "video/mp4")
-            put_file(urls["narration"], Path(narration.wav_path), "audio/wav")
+            for narration, url in zip(narrations, urls["narrations"], strict=True):
+                put_file(url, Path(narration.wav_path), "audio/wav")
 
         return {
             "scene_count": len(scenes),
-            "narration_duration_seconds": narration.duration_seconds,
+            "narration_durations_seconds": [n.duration_seconds for n in narrations],
         }
     except JobError as exc:
         return {"error": str(exc)}

@@ -18,6 +18,9 @@ WORD_TARGET_RATIO = 0.92  # prompted target, leaving headroom under the hard cei
 # corrected_idea must be ~100% Urdu script; this allows a couple of genuine
 # brand/technical names (e.g. "OmniVoice") to stay in Latin letters.
 ALLOWED_LATIN_WORDS_IN_IDEA = 2
+# Each scene's narration is spoken by TTS, which mispronounces Roman Urdu, so it gets a
+# tighter allowance (one brand/technical name per scene at most).
+ALLOWED_LATIN_WORDS_IN_NARRATION = 1
 
 _SENTENCE_END_CHARS = "۔.!?"
 _LATIN_LETTER_RE = re.compile(r"[A-Za-z]")
@@ -36,11 +39,20 @@ def _ensure_configured() -> None:
     _configured = True
 
 
+class SceneOutput(BaseModel):
+    visual_prompt: str  # English, for Wan 2.2; depicts exactly what narration_ur says
+    narration_ur: str  # Urdu script, <= WORDS_PER_5S_MAX words; says what this scene shows
+
+
 class ScriptGenerationOutput(BaseModel):
     corrected_idea: str
     title: str
-    urdu_script: str
-    scenes: list[str]
+    scenes: list[SceneOutput]
+
+    @property
+    def urdu_script(self) -> str:
+        """Joined narrations, kept for display / backward compatibility only."""
+        return " ".join(n for n in (sc.narration_ur.strip() for sc in self.scenes) if n)
 
 
 def scene_count_for(duration_seconds: int) -> int:
@@ -57,10 +69,6 @@ def word_count(text: str) -> int:
 
 def word_limit_for(duration_seconds: int) -> int:
     return scene_count_for(duration_seconds) * WORDS_PER_5S_MAX
-
-
-def _target_word_count(duration_seconds: int) -> int:
-    return round(word_limit_for(duration_seconds) * WORD_TARGET_RATIO)
 
 
 def _count_latin_words(text: str) -> int:
@@ -113,10 +121,9 @@ def _build_agent(model: str) -> Agent:
     return Agent(
         name="UrduScriptWriter",
         instructions=(
-            "You write short video scripts for Pakistani students making "
-            "educational/explainer videos. The student's idea may be written in "
-            "Roman Urdu, Urdu script, or English, and may contain spelling "
-            "mistakes. Given the idea and a target duration:\n"
+            "You write short explainer videos for Pakistani students. The student's "
+            "idea may be written in Roman Urdu, Urdu script, or English, and may "
+            "contain spelling mistakes. Given the idea and a target duration:\n"
             "1. Rewrite the idea as `corrected_idea` ENTIRELY IN URDU SCRIPT "
             "(not Roman Urdu, not English) — if the student wrote in Roman "
             "Urdu or English, fully transliterate/translate it into Urdu "
@@ -125,19 +132,28 @@ def _build_agent(model: str) -> Agent:
             "brand or technical name with no established Urdu spelling (e.g. "
             "OmniVoice, YouTube) — keep these to an absolute minimum, ideally "
             "zero, and never more than one or two.\n"
-            "2. Write a short, catchy `title` for the video, also entirely in "
-            "Urdu script (same exception as above).\n"
-            "3. Write a natural, grammatically correct narration script in "
-            "proper Urdu script (not Roman Urdu) as `urdu_script`. The given "
-            "word count is a HARD CEILING you must stay at or under, not a "
-            "rough target — when in doubt, write shorter.\n"
-            "4. Break the video into `scenes`: short English visual-description "
-            "prompts (one per scene) suitable for an AI video generator, each "
-            "describing only the visual action/subject on screen during that "
-            "5-second segment. Scenes must NEVER request any on-screen text, "
-            "captions, subtitles, overlays, title cards, logos, or watermarks — "
-            "the video generator renders text poorly and the narration is "
-            "spoken aloud in Urdu, not shown as text.\n"
+            "2. Write a short, catchy `title`, also entirely in Urdu script "
+            "(same exception as above).\n"
+            "3. Write `scenes`: one entry per 5-second segment, in story order. "
+            "EVERY scene has two fields that you write TOGETHER, as one moment:\n"
+            "   - `visual_prompt`: an English description for an AI video generator "
+            "of exactly what the viewer sees in these 5 seconds (concrete subject, "
+            "action, setting, camera). It must depict precisely what that scene's "
+            "`narration_ur` says — nothing the narration does not mention, and "
+            "nothing in the narration that cannot be seen.\n"
+            "   - `narration_ur`: the Urdu voice-over for that same scene, in "
+            "proper Urdu script (never Roman Urdu), simple spoken Urdu, PRESENT "
+            "TENSE, describing what is visible right now (for example: 'ایک بچہ "
+            "کتاب کھولتا ہے'). The word count given is a HARD CEILING per scene — "
+            "when in doubt, write shorter. Each narration is spoken on its own over "
+            "its own clip, so it must make sense for that clip alone.\n"
+            "Read in order, the narrations must still tell the student's idea as a "
+            "story (opening, middle, close) — do not write a separate explanation "
+            "unrelated to the pictures.\n"
+            "Visual prompts must NEVER request any on-screen text, captions, "
+            "subtitles, overlays, title cards, logos, labels, or watermarks — the "
+            "video generator renders text poorly and the words are spoken aloud, "
+            "not shown.\n"
             "Respond only via the structured output fields."
         ),
         output_type=ScriptGenerationOutput,
@@ -152,8 +168,7 @@ async def _run_once(
     settings = get_settings()
     agent = _build_agent(settings.OPENAI_MODEL)
     scene_count = scene_count_for(duration_seconds)
-    hard_limit = word_limit_for(duration_seconds)
-    target_words = _target_word_count(duration_seconds)
+    target_words = _target_scene_words()
     prompt = (
         f"Student idea: {idea}\n"
         f"Target video duration: {duration_seconds} seconds "
@@ -161,11 +176,11 @@ async def _run_once(
         f"`corrected_idea` MUST be written entirely in Urdu script (no Roman "
         f"Urdu/English words) except at most {ALLOWED_LATIN_WORDS_IN_IDEA} genuine "
         f"brand/technical name(s).\n"
-        f"Write exactly {scene_count} scene(s) in `scenes`, with no on-screen "
-        f"text/captions/subtitles/overlays/title cards/logos/watermarks requested "
-        f"in any scene.\n"
-        f"The `urdu_script` MUST be at most {hard_limit} words total (hard limit) — "
-        f"aim for about {target_words} words."
+        f"Write exactly {scene_count} scene(s) in `scenes`. In each scene, "
+        f"`narration_ur` MUST be at most {WORDS_PER_5S_MAX} words (hard limit, per "
+        f"scene) — aim for about {target_words} — and must describe what that same "
+        f"scene's `visual_prompt` shows. No scene may request on-screen "
+        f"text/captions/subtitles/overlays/title cards/logos/watermarks."
     )
     if feedback:
         prompt += f"\n\n{feedback}"
@@ -186,66 +201,97 @@ async def _run_once(
     return result.final_output
 
 
+def _target_scene_words() -> int:
+    return round(WORDS_PER_5S_MAX * WORD_TARGET_RATIO)
+
+
+class _Findings:
+    """Per-scene validation result: `retry_feedback` drives the one retry; `hard_failures`
+    are what may not survive it (the trim only fixes over-limit narrations)."""
+
+    def __init__(self) -> None:
+        self.retry_feedback: list[str] = []
+        self.hard_failures: list[str] = []
+        self.over_limit_scenes: list[int] = []
+
+
+def _check(output: ScriptGenerationOutput, required_scenes: int) -> _Findings:
+    f = _Findings()
+    if len(output.scenes) != required_scenes:
+        msg = f"You wrote {len(output.scenes)} scene(s); write exactly {required_scenes}."
+        f.retry_feedback.append(msg)
+        f.hard_failures.append("scene_count")
+    if _count_latin_words(output.corrected_idea) > ALLOWED_LATIN_WORDS_IN_IDEA:
+        f.retry_feedback.append(
+            f"Your previous corrected_idea mixed in Latin-script (Roman Urdu/English) "
+            f'words: "{output.corrected_idea}". corrected_idea MUST be written entirely '
+            f"in Urdu script — transliterate every Roman Urdu/English word into Urdu "
+            f"letters. Only a genuine brand/technical name with no established Urdu "
+            f"spelling may stay in Latin letters, and never more than "
+            f"{ALLOWED_LATIN_WORDS_IN_IDEA}."
+        )
+        f.hard_failures.append("idea_latin")
+    for i, scene in enumerate(output.scenes, start=1):
+        wc = word_count(scene.narration_ur)
+        if wc == 0:
+            f.retry_feedback.append(f"Scene {i} has an empty narration_ur; write it.")
+            f.hard_failures.append(f"scene_{i}_empty")
+        elif wc > WORDS_PER_5S_MAX:
+            f.retry_feedback.append(
+                f"Scene {i}'s narration_ur was {wc} words — over the hard limit of "
+                f"{WORDS_PER_5S_MAX} words per scene. Rewrite it shorter (aim for about "
+                f"{_target_scene_words()}), still describing what that scene's "
+                f"visual_prompt shows."
+            )
+            f.over_limit_scenes.append(i - 1)
+        if _count_latin_words(scene.narration_ur) > ALLOWED_LATIN_WORDS_IN_NARRATION:
+            f.retry_feedback.append(
+                f'Scene {i}\'s narration_ur contains Latin-script (Roman Urdu/English) words: '
+                f'"{scene.narration_ur}". Narration MUST be entirely in Urdu script.'
+            )
+            f.hard_failures.append(f"scene_{i}_latin")
+    return f
+
+
 async def generate_script(idea: str, duration_seconds: int) -> ScriptGenerationOutput:
-    """Moderates the idea, then generates a script that is GUARANTEED to fit
-    the hard scene-count/word-count limits and be fully Urdu-script before
-    returning (SC-003): retries once with explicit feedback naming the
-    overage/mixed-script issue, then trims server-side at a sentence boundary
-    if still over the word limit — the Review screen must never receive an
-    unapprovable script."""
+    """Moderates the idea, then generates scenes (visual prompt + Urdu narration written
+    together) that are GUARANTEED to fit the hard limits before returning (SC-003): checks
+    scene count, per-scene word limit and Urdu-script-only text, retries once with feedback
+    naming exactly what was wrong, then trims any still-over-limit narration server-side at a
+    sentence boundary — the Review screen must never receive an unapprovable script."""
     await moderation_service.check_idea(idea)
 
     required_scenes = scene_count_for(duration_seconds)
-    hard_limit = word_limit_for(duration_seconds)
 
     output = await _run_once(idea, duration_seconds)
-    wc = word_count(output.urdu_script)
-    scenes_ok = len(output.scenes) == required_scenes
-    idea_ok = _count_latin_words(output.corrected_idea) <= ALLOWED_LATIN_WORDS_IN_IDEA
+    findings = _check(output, required_scenes)
 
-    if not scenes_ok or wc > hard_limit or not idea_ok:
+    if findings.retry_feedback:
         logger.warning(
             "llm_output_invalid_retrying",
             extra={
-                "word_count": wc,
-                "hard_limit": hard_limit,
-                "scenes_ok": scenes_ok,
-                "idea_ok": idea_ok,
+                "over_limit_scenes": [i + 1 for i in findings.over_limit_scenes],
+                "hard_failures": findings.hard_failures,
             },
         )
-        feedback_parts = []
-        if wc > hard_limit:
-            feedback_parts.append(
-                f"Your previous urdu_script was {wc} words — over the hard limit of "
-                f"{hard_limit} words. Rewrite it shorter, at or under {hard_limit} words "
-                f"(aim for about {_target_word_count(duration_seconds)})."
-            )
-        if not scenes_ok:
-            feedback_parts.append(
-                f"You wrote {len(output.scenes)} scene(s); write exactly {required_scenes}."
-            )
-        if not idea_ok:
-            feedback_parts.append(
-                f"Your previous corrected_idea mixed in Latin-script (Roman Urdu/English) "
-                f'words: "{output.corrected_idea}". corrected_idea MUST be written entirely '
-                f"in Urdu script — transliterate every Roman Urdu/English word into Urdu "
-                f"letters. Only a genuine brand/technical name with no established Urdu "
-                f"spelling may stay in Latin letters, and never more than "
-                f"{ALLOWED_LATIN_WORDS_IN_IDEA}."
-            )
-        output = await _run_once(idea, duration_seconds, feedback=" ".join(feedback_parts))
-        wc = word_count(output.urdu_script)
-        scenes_ok = len(output.scenes) == required_scenes
-        idea_ok = _count_latin_words(output.corrected_idea) <= ALLOWED_LATIN_WORDS_IN_IDEA
+        output = await _run_once(
+            idea, duration_seconds, feedback=" ".join(findings.retry_feedback)
+        )
+        findings = _check(output, required_scenes)
 
-    if not scenes_ok or not idea_ok:
+    if findings.hard_failures:
+        logger.error("llm_output_invalid_after_retry", extra={"failures": findings.hard_failures})
         raise AppError("SCRIPT_GENERATION_FAILED", "Couldn't generate a script. Please try again.")
 
-    if wc > hard_limit:
+    for i in findings.over_limit_scenes:
+        scene = output.scenes[i]
         logger.warning(
-            "llm_output_trimmed_server_side", extra={"word_count": wc, "hard_limit": hard_limit}
+            "llm_scene_trimmed_server_side",
+            extra={"scene": i + 1, "word_count": word_count(scene.narration_ur)},
         )
-        output.urdu_script = _trim_to_sentence_boundary(output.urdu_script, hard_limit)
+        scene.narration_ur = _trim_to_sentence_boundary(scene.narration_ur, WORDS_PER_5S_MAX)
 
-    output.scenes = [_strip_text_overlay_requests(s) for s in output.scenes]
+    for scene in output.scenes:
+        scene.visual_prompt = _strip_text_overlay_requests(scene.visual_prompt)
+        scene.narration_ur = scene.narration_ur.strip()
     return output

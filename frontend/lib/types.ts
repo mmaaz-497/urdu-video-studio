@@ -23,13 +23,26 @@ export interface Voice {
   previewUrl: string
 }
 
+/** One 5 s segment: what the video generator draws and what the voice says over it. */
+export interface Scene {
+  visualPrompt: string
+  narrationUr: string
+}
+
 export interface GeneratedScript {
   correctedIdea: string
   title: string
-  urduScript: string
-  scenes: string[]
+  urduScript: string // narrations joined; display / backward compatibility only
+  scenes: Scene[]
   wordCount: number
   wordLimit: number
+  sceneWordLimit: number
+}
+
+export interface VideoDownload {
+  url: string
+  filename: string
+  expiresInSeconds: number
 }
 
 export type VideoJobStatus =
