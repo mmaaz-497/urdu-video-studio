@@ -7,13 +7,14 @@ Reads RUNPOD_API_KEY / RUNPOD_ENDPOINT_ID / MAX_PROCESSING_SECONDS from backend/
   python gpu-worker/scripts/diagnose_endpoint.py                 # report only
   python gpu-worker/scripts/diagnose_endpoint.py --purge         # also cancel all queued jobs
   python gpu-worker/scripts/diagnose_endpoint.py --fix-timeout   # raise executionTimeoutMs if too low
-  python gpu-worker/scripts/diagnose_endpoint.py --apply-fix     # set GPUs to RTX 4090/5090 + CUDA 13.0
+  python gpu-worker/scripts/diagnose_endpoint.py --apply-fix     # diff: GPUs -> RTX 4090/5090, flashboot on
+  python gpu-worker/scripts/diagnose_endpoint.py --apply-fix --yes   # apply it
 
 APIs used (RunPod docs):
   GET  https://api.runpod.ai/v2/{id}/health               worker + job counts
   POST https://api.runpod.ai/v2/{id}/purge-queue          cancel queued (not running) jobs
   GET  https://rest.runpod.io/v1/endpoints/{id}           endpoint config (REST)
-  PATCH https://rest.runpod.io/v1/endpoints/{id}          update config (only with --fix-timeout)
+  PATCH https://rest.runpod.io/v1/endpoints/{id}          update config (--fix-timeout / --apply-fix --yes)
   POST https://api.runpod.io/graphql                      dataCenters.gpuAvailability / gpuTypes
 Stdlib only, so it runs anywhere.
 """
@@ -201,19 +202,59 @@ def show_stock(key: str, cfg: dict) -> None:
         print("    Wait, or create a new volume in another region and re-download the weights.")
 
 
-RECOMMENDED_GPUS = ["NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 5090"]  # >= 24 GB, stocked in EU-RO-1
+# Exact GraphQL gpuTypes ids (validated live in apply_fix). 4090 first: cheaper, more stock.
+RECOMMENDED_GPUS = ["NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 5090"]
 
 
-def apply_fix(cfg: dict, eid: str, key: str) -> None:
-    section("4b. Applying GPU / CUDA fix")
-    body = {
-        "gpuTypeIds": RECOMMENDED_GPUS,
-        "allowedCudaVersions": ["13.0"],  # image is built on cuda13.0; host driver must be >= 13.0
+def _gpu_ids_now(eid: str, key: str) -> str | None:
+    status, res = gql(key, "query { myself { endpoints { id gpuIds } } }")
+    if status == 200 and isinstance(res, dict) and res.get("data"):
+        for ep in res["data"]["myself"]["endpoints"]:
+            if ep["id"] == eid:
+                return ep.get("gpuIds") or ""
+    return None
+
+
+def apply_fix(cfg: dict, eid: str, key: str, yes: bool) -> int:
+    section("4b. GPU / flashboot fix" + ("" if yes else "  (DRY RUN - pass --yes to apply)"))
+    status, res = gql(key, "query { gpuTypes { id memoryInGb } }")
+    if status != 200 or not isinstance(res, dict) or res.get("errors"):
+        print(f"  Cannot verify GPU ids against gpuTypes (HTTP {status}); aborting, nothing changed.")
+        return 1
+    known = {g["id"]: g.get("memoryInGb") for g in res["data"]["gpuTypes"]}
+    missing = [g for g in RECOMMENDED_GPUS if g not in known]
+    if missing:
+        print(f"  GPU ids not found in gpuTypes: {missing}; aborting, nothing changed.")
+        return 1
+
+    body = {"gpuTypeIds": RECOMMENDED_GPUS, "flashboot": True}
+    before = {
+        "gpuTypeIds": cfg.get("gpuTypeIds"),
+        "gpuIds (GraphQL)": cfg.get("_gpuIds"),
+        "flashboot": cfg.get("flashboot"),
     }
-    print(f"  PATCH {body}")
+    print("  Not touched: allowedCudaVersions / minCudaVersion "
+          f"({cfg.get('allowedCudaVersions')!r} / {cfg.get('minCudaVersion')!r})")
+    print("  --- before")
+    for k, v in before.items():
+        print(f"  - {k:<18} {v!r}")
+    print("  +++ after (requested)")
+    print(f"  + {'gpuTypeIds':<18} {body['gpuTypeIds']!r}  ({', '.join(str(known[g]) + ' GB' for g in RECOMMENDED_GPUS)})")
+    print(f"  + {'flashboot':<18} True")
+    if not yes:
+        print("  Dry run: nothing changed. Re-run with --apply-fix --yes to apply.")
+        return 0
+
     status, res = call("PATCH", f"{REST}/endpoints/{eid}", key, body)
-    print(f"  HTTP {status}" + ("" if status == 200 else f" {res}"))
-    print("  (RunPod does a rolling release; verify with a re-run of this script.)")
+    print(f"  PATCH HTTP {status}" + ("" if status == 200 else f" {res}"))
+    if status != 200:
+        return 1
+    now = _gpu_ids_now(eid, key)
+    print(f"  gpuIds now (GraphQL): {now!r}")
+    if now and any(t.strip().startswith("-") for t in now.split(",")):
+        print("  !! Leftover exclusions remain in gpuIds; clear them in the dashboard (Edit endpoint > GPU selection).")
+    print("  (RunPod does a rolling release; re-run this script without flags to verify.)")
+    return 0
 
 
 def check_settings(cfg: dict, env: dict, eid: str, key: str, fix: bool) -> None:
@@ -257,7 +298,7 @@ def check_settings(cfg: dict, env: dict, eid: str, key: str, fix: bool) -> None:
         problems += 1
         print(f"  !! Image needs host driver CUDA >= 13.0 but minCudaVersion={cuda} and no allowed list:")
         print("     a worker may land on a CUDA 12.x host and fail with 'driver too old'.")
-        print("     Set Allowed CUDA versions = 13.0 (dashboard > Edit endpoint) or use --apply-fix.")
+        print("     Set the minimum CUDA version to 13.0 (dashboard > Edit endpoint).")
     if problems == 0:
         print("  no config problems found.")
 
@@ -273,7 +314,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--purge", action="store_true", help="cancel all stale queued jobs")
     ap.add_argument("--apply-fix", action="store_true",
-                    help="PATCH gpuTypeIds=[RTX 4090, RTX 5090] and allowedCudaVersions=[13.0]")
+                    help="set GPUs to [RTX 4090, RTX 5090] and enable flashboot (dry run unless --yes)")
+    ap.add_argument("--yes", action="store_true", help="actually apply --apply-fix (otherwise only a diff is shown)")
     ap.add_argument("--fix-timeout", action="store_true",
                     help="raise executionTimeoutMs to MAX_PROCESSING_SECONDS if lower")
     args = ap.parse_args()
@@ -293,7 +335,7 @@ def main() -> int:
     if args.purge:
         purge(eid, key)  # purge BEFORE applying the fix so stale jobs don't start on new workers
     if args.apply_fix:
-        apply_fix(cfg, eid, key)
+        return apply_fix(cfg, eid, key, args.yes)
     return 0
 
 

@@ -252,12 +252,28 @@ def put_file(url: str, path: Path, content_type: str) -> None:
                 )
             if r.ok:
                 return
-            last = RuntimeError(f"HTTP {r.status_code}")
+            detail = _r2_error_detail(r)
+            last = RuntimeError(f"HTTP {r.status_code}{detail}")
+            if 400 <= r.status_code < 500 and r.status_code not in (408, 429):
+                # Auth/signature/permission errors will not fix themselves: fail fast.
+                raise JobError(f"Upload failed (not retried): {last}")
         except requests.RequestException as exc:
             last = exc
         if attempt < PUT_RETRIES:
             time.sleep(2**attempt)
     raise JobError(f"Upload failed after {PUT_RETRIES + 1} attempts: {last}")
+
+
+def _r2_error_detail(r: "requests.Response") -> str:
+    """Extract Code/Message from R2's XML error body (never includes the URL)."""
+    import re
+
+    body = (r.text or "")[:2000]
+    code = re.search(r"<Code>(.*?)</Code>", body, re.S)
+    msg = re.search(r"<Message>(.*?)</Message>", body, re.S)
+    if code or msg:
+        return f" {code.group(1) if code else '?'}: {msg.group(1) if msg else ''}"
+    return f" {body[:200]}" if body else ""
 
 
 # ---------------------------------------------------------------- handler

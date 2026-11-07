@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 
 _MAX_RETRIES = 2
 _TIMEOUT_SECONDS = 10
+# Covers queue wait + MAX_PROCESSING_SECONDS (600) with wide margin; used for GET and PUT.
 _PRESIGNED_URL_EXPIRY_SECONDS = 3600
 
 
@@ -27,7 +28,10 @@ class R2StorageService:
             endpoint_url=f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
             aws_access_key_id=settings.R2_ACCESS_KEY_ID,
             aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+            region_name="auto",
             config=BotoConfig(
+                signature_version="s3v4",  # R2 rejects SigV2 presigned URLs (boto3 default)
+                s3={"addressing_style": "path"},
                 connect_timeout=_TIMEOUT_SECONDS,
                 read_timeout=_TIMEOUT_SECONDS,
                 retries={"max_attempts": 0},
