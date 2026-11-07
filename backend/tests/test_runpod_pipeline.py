@@ -215,3 +215,36 @@ def test_worker_error_output_becomes_runpod_unavailable():
         runpod_provider.wait_for_result(job, sleep=lambda s: None)
     assert exc.value.code == "RUNPOD_UNAVAILABLE"
     assert "Upload failed" not in exc.value.message
+
+
+def test_queue_status_reported_and_no_scene_progress_until_in_progress():
+    job = _FakeJob(
+        [
+            {"status": "IN_QUEUE", "output": "scene 1/1 done"},  # stale text must be ignored
+            {"status": "IN_PROGRESS", "output": "scene 1/1 done"},
+            {"status": "COMPLETED", "output": {"scene_count": 1, "narration_duration_seconds": 4}},
+        ]
+    )
+    scenes, statuses = [], []
+    runpod_provider.wait_for_result(
+        job, scenes.append, sleep=lambda s: None, on_status=statuses.append
+    )
+    assert statuses == ["IN_QUEUE", "IN_PROGRESS"] and scenes == [1]
+
+
+def test_timeout_and_failure_cancel_the_runpod_job():
+    class _Job(_FakeJob):
+        cancelled = 0
+
+        def cancel(self):
+            self.cancelled += 1
+
+    stuck = _Job([{"status": "IN_QUEUE"}] * 5)
+    with pytest.raises(AppError):
+        runpod_provider.wait_for_result(stuck, timeout=-1, sleep=lambda s: None)
+    assert stuck.cancelled == 1
+
+    failed = _Job([{"status": "FAILED", "error": "boom"}])
+    with pytest.raises(AppError):
+        runpod_provider.wait_for_result(failed, sleep=lambda s: None)
+    assert failed.cancelled == 1

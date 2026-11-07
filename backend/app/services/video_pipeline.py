@@ -184,7 +184,13 @@ def _run_runpod(db, job) -> None:
         "narration": _storage_call(storage.get_presigned_put_url(narration_key, "audio/wav")),
     }
 
-    video_job_service.mark_status(db, job.id, "generating_scenes", progress_current_scene=0)
+    # progress_current_scene=None means "queued at RunPod, waiting for a GPU worker"; it becomes
+    # 0 (rendering scene 1) only once RunPod reports IN_PROGRESS.
+    video_job_service.mark_status(db, job.id, "generating_scenes", progress_current_scene=None)
+
+    def _on_status(runpod_status: str) -> None:
+        if runpod_status == "IN_PROGRESS":
+            video_job_service.mark_status(db, job.id, "generating_scenes", progress_current_scene=0)
 
     def _on_progress(done: int) -> None:
         video_job_service.mark_status(
@@ -198,6 +204,7 @@ def _run_runpod(db, job) -> None:
         voice_id=job.voice_id,
         presigned_put_urls=put_urls,
         on_progress=_on_progress,
+        on_status=_on_status,
     )
     narration_seconds = float(result.get("narration_duration_seconds") or 0)
     logger.info(

@@ -18,6 +18,8 @@ the folders below.
 │   │   └── vae/
 │   │       └── wan2.2_vae.safetensors                 (~1.4 GB)
 │   └── omnivoice-urdu-6000/               # full HF repo snapshot (OmniVoice Urdu)
+├── .cache/huggingface/hub/                # HF_HOME=/runpod-volume/.cache/huggingface (set by handler.py)
+│   └── models--eustlb--higgs-audio-v2-tokenizer/   # OmniVoice tokenizer; pre-cached, never re-downloaded
 └── voices/
     ├── male.wav        # reference voice, mono, ~5-15 s clean speech
     ├── male.txt        # exact transcript of male.wav (Urdu)
@@ -96,3 +98,10 @@ works on torch 2.14.1; `python main.py --cpu --quick-test-for-ci` exits 0; `impo
 Not verifiable without a GPU: actual CUDA init and a real generation job on RunPod.
 Image size on disk: base 6.3 GB, final ~9.0 GB (+2.7 GB). pip resolves `gradio` to the old 3.36.1
 via omnivoice's unpinned dependency (`import omnivoice` still works; not checked whether inference touches gradio).
+
+## Startup preflight (handler.py)
+
+Before launching ComfyUI the handler checks that `/runpod-volume` is mounted, every model file
+above exists with a plausible size, `voices/{male,female}.wav` exist and the higgs tokenizer is in
+the HF cache. Failures come back as job errors: `Network volume not mounted: ...` or
+`Missing model: <path>`. After it passes, `HF_HUB_OFFLINE=1` is set so cold starts never download.

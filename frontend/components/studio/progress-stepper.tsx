@@ -36,8 +36,11 @@ export function ProgressStepper({ status, currentScene, totalScenes, className }
       {STEPS.map((step, index) => {
         const isDone = index < activeIndex
         const isActive = index === activeIndex
-        const label =
-          step.key === 'generating_scenes' && (isActive || isDone)
+        // currentScene === null while active means RunPod has the job queued (no GPU yet).
+        const waitingForGpu = step.key === 'generating_scenes' && isActive && currentScene == null
+        const label = waitingForGpu
+          ? 'Waiting for a GPU…'
+          : step.key === 'generating_scenes' && (isActive || isDone)
             ? `Generating scene ${Math.min(currentScene ?? 1, totalScenes) || 1}/${totalScenes}`
             : step.label
 
