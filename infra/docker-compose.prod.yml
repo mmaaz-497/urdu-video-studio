@@ -11,6 +11,15 @@
 #   * every name is prefixed "uvs-"
 name: uvs
 
+# Networking: NO container DNS. On this cPanel host the system nameserver (named/PowerDNS)
+# answers on every address's port 53, including the podman bridge gateway, so podman's
+# dnsname/aardvark resolver gets REFUSED for service names AND for outside hosts. Instead:
+#   * uvs-net is created by release.sh with --disable-dns and subnet 10.89.77.0/24, so
+#     containers use the host's resolvers for the outside world;
+#   * every long-running service has a fixed IP, and the names the app uses (postgres,
+#     redis, backend) are written into /etc/hosts via extra_hosts.
+# Keep the IPs below, extra_hosts and UVS_SUBNET in infra/release.sh in sync.
+#
 # Healthchecks: always CMD-SHELL. Podman 4.9's Docker-compat API re-splits exec-form
 # ["CMD", ...] arguments on spaces (python -c "import x; ..." becomes `python -c import`),
 # and podman-compose 1.0.6 mangles them too. Verified on AlmaLinux 8.10 + podman 4.9.4.
@@ -34,6 +43,10 @@ x-app: &app
       condition: service_healthy
     redis:
       condition: service_healthy
+  extra_hosts: &uvs-hosts
+    - "postgres:10.89.77.10"
+    - "redis:10.89.77.11"
+    - "backend:10.89.77.12"
   logging: *logging
 
 services:
@@ -62,6 +75,9 @@ services:
       - max_connections=40
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      default:
+        ipv4_address: 10.89.77.10
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
@@ -91,6 +107,9 @@ services:
       - ""
     volumes:
       - redisdata:/data
+    networks:
+      default:
+        ipv4_address: 10.89.77.11
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 10s
@@ -105,6 +124,9 @@ services:
     container_name: uvs-backend
     ports:
       - "127.0.0.1:8100:8000"
+    networks:
+      default:
+        ipv4_address: 10.89.77.12
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
       interval: 15s
@@ -117,6 +139,9 @@ services:
   worker:
     <<: *app
     container_name: uvs-worker
+    networks:
+      default:
+        ipv4_address: 10.89.77.13
     # Whole worker (and every ffmpeg/ffprobe it spawns) at low CPU priority so Apache/PHP
     # always win; ffmpeg itself is also capped at FFMPEG_THREADS threads.
     command: ["nice", "-n", "10", "python", "-m", "app.worker"]
@@ -135,6 +160,9 @@ services:
     <<: *app
     container_name: uvs-scheduler
     command: ["python", "-m", "app.scheduler"]
+    networks:
+      default:
+        ipv4_address: 10.89.77.14
     # Measured peak 60 MB while sweeping stale jobs (+30% -> 80m). It must not import the
     # OpenAI Agents SDK (see the lazy import in video_job_service.create_job).
     mem_limit: 80m
@@ -149,8 +177,12 @@ services:
       TZ: ${TZ:-Asia/Karachi}
     depends_on:
       - backend
+    extra_hosts: *uvs-hosts
     ports:
       - "127.0.0.1:3100:3000"
+    networks:
+      default:
+        ipv4_address: 10.89.77.15
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""]
       interval: 15s
@@ -161,6 +193,16 @@ services:
     memswap_limit: 128m
     logging: *logging
 
+  # One-off: `/opt/uvs/uvs run --rm migrate` (release.sh does this on every deploy).
+  # No fixed IP, so it never collides with the running backend's address.
+  migrate:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    mem_limit: 224m
+    memswap_limit: 224m
+
 volumes:
   pgdata:
     name: uvs-pgdata
@@ -169,4 +211,6 @@ volumes:
 
 networks:
   default:
+    # Created (and migrated from the old DNS-enabled network) by infra/release.sh.
     name: uvs-net
+    external: true

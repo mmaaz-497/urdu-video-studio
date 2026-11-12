@@ -258,6 +258,21 @@ containers (`tokoshopee-postgres` on 127.0.0.1:5432, `fiv-cobalt` on 127.0.0.1:4
   imports `llm_service` (OpenAI Agents SDK, ~100 MB) lazily inside `create_job`. ffmpeg is capped at
   `FFMPEG_THREADS=2` (decoders, filters, encoder) and the whole worker runs under
   `nice -n 10`. Container logs are capped at 10 MB each.
+- **No container DNS (found on the first real deploy, 2026-11-12).** cPanel's system
+  nameserver (`named`, `listen-on any`, recursion off) binds every interface address
+  including a podman bridge gateway (`10.89.0.1:53`) whenever it restarts/reloads (zone
+  edits, nightly updates). From then on it receives the containers' DNS queries instead of
+  podman's dnsname dnsmasq and answers **REFUSED** — for service names *and* for outside
+  hosts (OpenAI, RunPod, R2). Reproduced on AlmaLinux 8.10 + podman 4.9.4 (CNI) + named:
+  dnsmasq answers until `systemctl restart named`, then every lookup is REFUSED. The same
+  would hit netavark's aardvark-dns. **Decision:** `release.sh` creates `uvs-net` itself
+  with `--disable-dns` on a fixed subnet `10.89.77.0/24` (compose treats it as external);
+  every long-running service has a fixed IP and the names the app uses (`postgres`,
+  `redis`, `backend`) come from `extra_hosts` (`/etc/hosts`), so `DATABASE_URL` and the
+  baked-in `BACKEND_ORIGIN=http://backend:8000` are unchanged; outside lookups use the
+  host's resolvers. Migrations run in a one-off `migrate` service without a fixed IP.
+  Every deploy verifies that internal and outside names resolve inside the containers.
+  Rejected: changing cPanel's named `listen-on` (risks DNS for 12 live sites).
 - **Reboot safety without rebooting.** Every deploy/rollback/check verifies that all six
   `uvs-*` containers exist and have restart policy `always` and that
   `podman-restart.service` is enabled — the server is never rebooted just to test this.

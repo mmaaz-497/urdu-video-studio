@@ -15,6 +15,51 @@ cd "$UVS_DIR"
 
 die() { echo "release.sh: $*" >&2; exit 1; }
 
+# Must match the ipv4_address/extra_hosts values in docker-compose.prod.yml.
+UVS_NET=uvs-net
+UVS_SUBNET=10.89.77.0/24
+UVS_GATEWAY=10.89.77.1
+
+ensure_network() {
+  # uvs-net is created here, with container DNS disabled: on this cPanel host the system
+  # nameserver answers on the bridge gateway's port 53 and REFUSEs podman's dnsname/aardvark
+  # queries. Names come from extra_hosts; outside lookups use the host's resolvers.
+  if podman network exists "$UVS_NET"; then
+    local dns subnet
+    dns=$(podman network inspect "$UVS_NET" --format '{{.DNSEnabled}}')
+    subnet=$(podman network inspect "$UVS_NET" --format '{{range .Subnets}}{{.Subnet}}{{end}}')
+    if [[ "$dns" == false && "$subnet" == "$UVS_SUBNET" ]]; then
+      return 0
+    fi
+    echo "==> Replacing $UVS_NET (dns=$dns subnet=$subnet) with dns=false subnet=$UVS_SUBNET"
+    # Removes only OUR containers (volumes, i.e. the database, are kept).
+    "$UVS" down --remove-orphans
+    podman network rm "$UVS_NET" \
+      || die "could not remove $UVS_NET; containers still attached: $(podman ps -a --filter network=$UVS_NET --format '{{.Names}}' | tr '\n' ' ')"
+  fi
+  echo "==> Creating network $UVS_NET ($UVS_SUBNET, container DNS disabled)"
+  podman network create --disable-dns --subnet "$UVS_SUBNET" --gateway "$UVS_GATEWAY" \
+    --label io.uvs.managed=true "$UVS_NET" >/dev/null
+}
+
+check_name_resolution() {
+  # Internal names come from /etc/hosts (extra_hosts); external ones from the host's resolvers.
+  podman exec uvs-backend python -c '
+import socket, sys
+bad = []
+for host in ("postgres", "redis", "backend", "api.openai.com", "api.runpod.ai"):
+    try:
+        socket.getaddrinfo(host, 443)
+    except OSError as exc:
+        bad.append(f"{host} ({exc})")
+if bad:
+    sys.exit("cannot resolve: " + ", ".join(bad))
+' || die "name resolution inside uvs-backend failed (see above)"
+  podman exec uvs-frontend node -e "require('dns').lookup('backend', e => process.exit(e ? 1 : 0))" \
+    || die "uvs-frontend cannot resolve 'backend'"
+  echo "DNS      postgres, redis, backend, api.openai.com, api.runpod.ai resolve inside the containers"
+}
+
 health_status() { podman inspect --format '{{.State.Health.Status}}' "$1" 2>/dev/null || echo missing; }
 
 wait_healthy() { # wait_healthy <seconds> <container>...
@@ -63,6 +108,7 @@ check() {
   echo "API      127.0.0.1:8100/health     -> $(curl -fsS --max-time 5 http://127.0.0.1:8100/health)"
   echo "API      127.0.0.1:3100/api/health -> $(curl -fsS --max-time 5 http://127.0.0.1:3100/api/health)  (Next.js rewrite / SSH-tunnel path)"
   echo "Frontend 127.0.0.1:3100/           -> HTTP $(curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/)"
+  check_name_resolution
   check_restart_policies
   "$UVS" ps --format 'table {{.Name}}\t{{.Image}}\t{{.Status}}'
   echo "Live release: $(<RELEASE)"
@@ -91,12 +137,14 @@ cmd_deploy() {
   done
   local prev; prev=$(cat RELEASE 2>/dev/null || true)
 
+  UVS_TAG="$tag" ensure_network
+
   echo "==> Starting postgres + redis"
   UVS_TAG="$tag" "$UVS" up -d postgres redis
   wait_healthy 120 uvs-postgres uvs-redis
 
   echo "==> alembic upgrade head (image $tag)"
-  UVS_TAG="$tag" "$UVS" run --rm --no-deps backend alembic upgrade head
+  UVS_TAG="$tag" "$UVS" run --rm --no-deps migrate
 
   echo "==> Switching the stack to $tag"
   switch_to "$tag"
