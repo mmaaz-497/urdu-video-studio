@@ -1,0 +1,14 @@
+# Only pyproject.toml, alembic.ini, alembic/ and app/ are copied; keep everything else
+# (secrets, local data, caches, tests) out of the build context.
+.env
+.env.*
+.venv/
+.data/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+**/*.py[cod]
+tests/
+scripts/
+Dockerfile
+.dockerignore

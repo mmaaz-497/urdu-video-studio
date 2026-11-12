@@ -47,7 +47,7 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-md border-border bg-surface shadow-raised">
+    <Card className="w-full max-w-md animate-rise-in shadow-depth-3">
       <CardHeader className="space-y-1">
         <CardTitle className="text-h2">Welcome back</CardTitle>
         <CardDescription>Log in to continue creating Urdu videos.</CardDescription>
@@ -89,11 +89,7 @@ export default function LoginPage() {
                 </FormItem>
               )}
             />
-            <Button
-              type="submit"
-              className="w-full bg-accent-gradient text-white hover:opacity-90"
-              disabled={submitting}
-            >
+            <Button type="submit" variant="gradient" className="w-full" disabled={submitting}>
               {submitting ? 'Logging in…' : 'Log in'}
             </Button>
           </form>

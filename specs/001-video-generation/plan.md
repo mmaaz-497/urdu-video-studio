@@ -42,8 +42,10 @@ reset), the video job status state machine, and LLM structured-output parsing/
 validation. No dedicated frontend test framework is introduced for this feature;
 TypeScript's compiler and ESLint provide static safety, consistent with minimal
 critical-path testing.
-**Target Platform**: Linux server (single VPS, Docker Compose, behind Caddy) for
-frontend/backend/worker/Postgres/Redis; Ubuntu via WSL2 for local development;
+**Target Platform**: Linux server — a single *shared* cPanel/WHM VPS (AlmaLinux 8,
+rootful Podman 4.9 driven by the Docker Compose binary over `podman.socket`, behind
+the host's existing Apache EA4 reverse proxy with cPanel AutoSSL; see Design Revision
+2026-11-12) for frontend/backend/worker/scheduler/Postgres/Redis; Ubuntu via WSL2 for local development;
 RunPod Serverless (ephemeral GPU containers, not a persistent server) for the GPU
 worker.
 **Project Type**: Web application with a separate GPU-worker deployable — a
@@ -156,8 +158,13 @@ gpu-worker/
 
 infra/
 ├── docker-compose.dev.yml       # Postgres + Redis only (frontend/backend run natively)
-├── docker-compose.prod.yml      # frontend, backend, worker, postgres, redis
-└── Caddyfile
+├── docker-compose.prod.yml      # frontend, backend, worker, scheduler, postgres, redis (podman)
+├── uvs.sh                       # VPS wrapper: the only way compose is ever invoked there
+├── deploy.sh                    # runs on the dev machine: build, ship, migrate, restart, check
+├── deploy.env.example           # VPS_HOST / VPS_PORT for deploy.sh (real file gitignored)
+├── .env.production.example      # every production variable (real .env only on the VPS)
+├── apache/urdu-video-studio.conf  # cPanel EA4 userdata include (reverse proxy)
+└── backup/uvs-backup.sh         # daily pg_dump, 7-day retention (root cron)
 ```
 
 **Structure Decision**: A 4-directory monorepo (`frontend/`, `backend/`,
@@ -165,8 +172,8 @@ infra/
 web-app layout. `gpu-worker/` must be its own deployable because it ships as a
 RunPod Serverless container bundling ComfyUI plus multi-gigabyte Wan 2.2/OmniVoice
 model weights — a fundamentally different runtime and deploy cadence from the
-lightweight FastAPI backend/RQ worker. `infra/` centralizes the Docker Compose
-and Caddy configuration shared across the deployable services.
+lightweight FastAPI backend/RQ worker. `infra/` centralizes the Compose file,
+Apache proxy include and deploy/backup scripts shared across the deployable services.
 
 ## Design Revision 2026-11-07: per-scene narration and attachment downloads
 
@@ -207,7 +214,74 @@ auth as the video) returns a short-lived URL whose response carries
 backend endpoint serving a `FileResponse` attachment. The button is a real `<button>`: it fetches
 the URL then clicks a hidden anchor; the player element is never touched.
 
+## Design Revision 2026-11-12: production on a shared cPanel/WHM VPS (Phase 8)
+
+The production host is **not** a clean VPS: AlmaLinux 8.10 with cPanel/WHM and 12 live
+sites; Apache (EA4) owns :80/:443; 2 vCPU / 3.8 GB RAM, already swapping; no Docker
+(`docker` is the podman-docker shim) and Podman 4.9.4 already runs other projects'
+containers (`tokoshopee-postgres` on 127.0.0.1:5432, `fiv-cobalt` on 127.0.0.1:4201);
+127.0.0.1:3000 and :8000 are taken; no host firewall; SELinux disabled.
+
+- **Caddy is dropped.** Apache must keep :80/:443 for the existing sites, and cPanel
+  AutoSSL issues the certificate. A per-domain EA4 *userdata include*
+  (`infra/apache/urdu-video-studio.conf`) proxies `/api/` → `127.0.0.1:8100/` (prefix
+  stripped, exactly like the dev rewrite) and everything else → `127.0.0.1:3100`, same
+  origin, excluding `/.well-known/` so AutoSSL's HTTP validation keeps working. Apache's
+  proxy modules are already loaded; no EA4 module installs.
+- **Containers: rootful Podman, never docker-ce** (on EL8 installing docker-ce removes
+  podman and would break the other projects' containers).
+- **Compose tool: the Docker Compose standalone binary (v5.7.1, pinned) over
+  `podman.socket`, not podman-compose.** Verified on AlmaLinux 8.10 + podman 4.9.4 +
+  EPEL (2026-11-12) with this exact compose file:
+  - EPEL 8 ships podman-compose **1.0.6**, which (a) turns `depends_on: condition:
+    service_healthy` into plain `--requires` (start order only, no health wait), (b)
+    rewrites exec-form healthchecks into an invalid shell string so backend/frontend stay
+    unhealthy forever, and (c) silently ignores `memswap_limit` (podman then allows swap
+    = 2× memory on an already-swapping host).
+  - Docker Compose over the socket waited for postgres/redis **Healthy** before starting
+    the app, applied `mem_limit`+`memswap_limit`, log caps, network aliases and
+    `restart: always`, and `down` left unrelated containers untouched; a full mock job
+    then ran end-to-end through 127.0.0.1:3100.
+  - Found during that test: podman 4.9's compat API **re-splits exec-form healthcheck
+    arguments on spaces**, so every healthcheck is written in `CMD-SHELL` form.
+  - Cost: `podman.socket` must be enabled (root-only unix socket).
+- **Isolation.** Every container/volume/network is named `uvs-*`; the project name is
+  pinned (`name: uvs` + `-p uvs`); compose is only ever run through `/opt/uvs/uvs`
+  (`infra/uvs.sh`), which also pins the file, tag and socket. Published ports bind
+  `127.0.0.1` only (`3100` frontend, `8100` API); Postgres and Redis publish nothing.
+- **Protecting the live sites.** Per-service memory caps with swap disabled per
+  container, measured under load (two back-to-back 3-scene jobs + parallel page loads):
+  postgres 160 MB, redis 64 MB (`maxmemory 32mb`, `noeviction`), backend 224 MB, worker
+  512 MB (measured peak 410–423 MB — ffmpeg's concat filter holds every clip's frames),
+  scheduler 144 MB, frontend 128 MB = **1232 MB**. ffmpeg is capped at
+  `FFMPEG_THREADS=2` (decoders, filters, encoder) and the whole worker runs under
+  `nice -n 10`. Container logs are capped at 10 MB each.
+- **No builds on the VPS.** A Next.js build would starve the live sites of RAM. Images
+  are built on the dev machine (`infra/deploy.sh`), tagged with the git short SHA and
+  streamed with `docker save | gzip | ssh … podman load`; an image whose ID the VPS
+  already has is re-tagged instead of re-uploaded. Rollback = re-point to the previous
+  tag (schema migrations are forward-only and not rolled back).
+- **Testable before DNS.** The Next.js `/api/*` rewrite is kept and baked at build time
+  with `BACKEND_ORIGIN=http://backend:8000` (internal network), so the whole app works
+  through `ssh -L 3100:127.0.0.1:3100` + `http://localhost:3100`; Secure cookies are sent
+  to `http://localhost` by Chrome, so `COOKIE_SECURE=true` stays.
+- **Proxy headers.** Uvicorn runs with `--proxy-headers` and `FORWARDED_ALLOW_IPS=*`; safe
+  because the API port is reachable only from 127.0.0.1 and the private stack network.
+  Cookies are always `Secure` in production (`COOKIE_SECURE`) and CSRF is double-submit,
+  so neither depends on the forwarded scheme.
+- **Boot.** `podman-restart.service` (already enabled) starts every `restart: always`
+  container at boot without ordering; the app converges by restarting until
+  Postgres/Redis are up (simulated: all healthchecks green ~15 s after an unordered start).
+- **Backups.** Root cron runs `pg_dump -Fc` daily into `/opt/uvs/backups`, keeping 7 days.
+
 ## Known Risks
+
+- **Worker memory scales with clip count/resolution.** ffmpeg's concat filter keeps every
+  input's decoded frames in memory; 3 × 5 s 720p clips peak at ~420 MB of the worker's
+  512 MB cap. A longer max duration or higher resolution needs re-measuring, or a
+  per-clip normalize + concat-demuxer pipeline.
+- **Scheduler imports the OpenAI Agents SDK** (via `video_job_service` → `llm_service`),
+  costing ~100 MB it never uses; a lazy import would let its cap drop to ~64 MB.
 
 - **`WORDS_PER_5S_MAX` (words-per-5-seconds narration limit, `backend/app/services/llm_service.py`) was calibrated against real OmniVoice output on 2026-11-05: it is now `12` (previously an uncalibrated estimate of 15, set when Phase 3 ran entirely in `VIDEO_PROVIDER=mock`).** Measured speech rate on the two preset voices: male mean 2.62 words/s (min 2.42), female mean 2.58 words/s (min 2.26). At 12 words per 5 s scene, mean speech takes ~4.6–4.7 s and even the slowest measured sample takes ~5.3 s, so narration fits without speed-up in the normal case and the 1.10× `atempo` (5.5 s) is only a rare safety net. (`scripts/calibrate_words.py` recommended 13, which would rely on `atempo` for most jobs and sit near the `SCRIPT_TOO_LONG` edge, so 12 was chosen deliberately.) The original risk text follows for context: This constant drives the `wordLimit` shown to students and the hard gate enforced on `POST /videos`. If it's wrong, every real (`VIDEO_PROVIDER=runpod`) job fails systematically: too generous and OmniVoice's real narration will routinely exceed the 10% `atempo` speedup budget, landing jobs in `SCRIPT_TOO_LONG`; too strict and scripts are needlessly short. Re-measure if the voices, the TTS model, or the sentence style change — see research.md A9.
 

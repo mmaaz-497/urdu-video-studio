@@ -17,6 +17,10 @@ def test_ffmpeg_never_inherits_terminal_stdin(monkeypatch):
     monkeypatch.setattr(ffmpeg_service.subprocess, "run", fake_run)
     ffmpeg_service._run(["ffmpeg", "-y", "-i", "a", "b"])
     assert seen["cmd"][:2] == ["ffmpeg", "-nostdin"]
+    # Thread cap (shared VPS): per-output -threads sits right before the output path.
+    assert seen["cmd"][-3:] == ["-threads", "2", "b"]
+    assert seen["cmd"][seen["cmd"].index("-i") - 2 :][:4] == ["-threads", "2", "-i", "a"]
+    assert seen["cmd"][seen["cmd"].index("-filter_complex_threads") + 1] == "2"
     assert seen["kw"]["stdin"] == subprocess.DEVNULL
     assert seen["kw"]["start_new_session"] is True
     assert seen["kw"]["timeout"] == ffmpeg_service.FFMPEG_TIMEOUT_SECONDS

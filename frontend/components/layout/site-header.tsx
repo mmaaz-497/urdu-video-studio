@@ -20,6 +20,14 @@ const NAV_LINKS = [
   { href: '/videos', label: 'My Videos' },
 ]
 
+/** Pill tab; the active route is a raised slab. */
+function navLinkClass(active: boolean) {
+  return cn(
+    'rounded-full border border-transparent px-4 py-1.5 text-body-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+    active && 'surface-3d border-border bg-surface-raised text-foreground shadow-depth-1'
+  )
+}
+
 export function SiteHeader({ variant }: SiteHeaderProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -41,25 +49,26 @@ export function SiteHeader({ variant }: SiteHeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 shadow-[0_8px_24px_-16px_rgb(0_0_0/0.35)] backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href={variant === 'authenticated' ? '/create' : '/'} className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-gradient">
+        <Link
+          href={variant === 'authenticated' ? '/create' : '/'}
+          className="flex items-center gap-2"
+        >
+          <span className="bg-accent-gradient flex h-8 w-8 items-center justify-center rounded-md shadow-cta">
             <Clapperboard className="h-4 w-4 text-white" />
           </span>
           <span className="text-h3 font-semibold">Urdu Video Studio</span>
         </Link>
 
-        <nav className="hidden items-center gap-6 sm:flex">
+        <nav aria-label="Main" className="hidden items-center gap-1 sm:flex">
           {variant === 'authenticated' &&
             NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={cn(
-                  'text-body-sm font-medium text-muted-foreground transition-colors hover:text-foreground',
-                  pathname?.startsWith(link.href) && 'text-foreground'
-                )}
+                aria-current={pathname?.startsWith(link.href) ? 'page' : undefined}
+                className={navLinkClass(pathname?.startsWith(link.href) ?? false)}
               >
                 {link.label}
               </Link>
@@ -78,7 +87,7 @@ export function SiteHeader({ variant }: SiteHeaderProps) {
               <Button variant="ghost" size="sm" asChild>
                 <Link href="/login">Login</Link>
               </Button>
-              <Button size="sm" className="bg-accent-gradient text-white hover:opacity-90" asChild>
+              <Button size="sm" variant="gradient" asChild>
                 <Link href="/register">Start Creating</Link>
               </Button>
             </>
@@ -87,21 +96,26 @@ export function SiteHeader({ variant }: SiteHeaderProps) {
       </div>
 
       {variant === 'authenticated' && (
-        <nav className="flex items-center gap-4 border-t border-border px-4 py-2 sm:hidden">
+        <nav
+          aria-label="Main"
+          className="flex items-center gap-1 border-t border-border px-3 pb-3 pt-2 sm:hidden"
+        >
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={cn(
-                'text-body-sm font-medium text-muted-foreground transition-colors hover:text-foreground',
-                pathname?.startsWith(link.href) && 'text-foreground'
-              )}
+              aria-current={pathname?.startsWith(link.href) ? 'page' : undefined}
+              className={navLinkClass(pathname?.startsWith(link.href) ?? false)}
             >
               {link.label}
             </Link>
           ))}
         </nav>
       )}
+      <span
+        aria-hidden
+        className="hairline-gradient absolute inset-x-0 -bottom-px h-px opacity-70"
+      />
     </header>
   )
 }

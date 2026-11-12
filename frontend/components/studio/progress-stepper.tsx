@@ -50,9 +50,12 @@ export function ProgressStepper({ status, currentScene, totalScenes, className }
               <span
                 className={cn(
                   'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-body-sm font-semibold transition-colors duration-250',
-                  isDone && 'border-primary bg-primary text-primary-foreground',
-                  isActive && 'border-primary bg-surface-raised text-primary animate-pulse motion-reduce:animate-none',
-                  !isDone && !isActive && 'border-border bg-surface text-muted-foreground'
+                  isDone && 'border-primary bg-primary text-primary-foreground shadow-cta',
+                  isActive &&
+                    'animate-pulse border-primary bg-surface-raised text-primary shadow-depth-2 motion-reduce:animate-none',
+                  !isDone &&
+                    !isActive &&
+                    'border-border bg-surface text-muted-foreground shadow-well'
                 )}
               >
                 {isDone ? <Check className="h-4 w-4" /> : index + 1}
@@ -70,8 +73,8 @@ export function ProgressStepper({ status, currentScene, totalScenes, className }
               <span
                 aria-hidden
                 className={cn(
-                  'hidden h-px flex-1 bg-border md:mx-2 md:mt-4 md:block',
-                  isDone && 'bg-primary'
+                  'hidden h-0.5 flex-1 rounded-full bg-border shadow-well md:mx-2 md:mt-4 md:block',
+                  isDone && 'bg-primary shadow-none'
                 )}
               />
             )}

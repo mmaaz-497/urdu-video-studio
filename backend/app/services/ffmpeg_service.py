@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
 
@@ -27,7 +28,20 @@ _SUBPROCESS_ISOLATION = {"stdin": subprocess.DEVNULL, "start_new_session": True}
 
 def _run(cmd: list[str]) -> None:
     if cmd[0] == "ffmpeg":
-        cmd = [cmd[0], "-nostdin", *cmd[1:]]
+        # FFMPEG_THREADS caps decoder, filter and encoder threads so assembly can't
+        # monopolise the CPU or RAM of a small, shared VPS (every decoder thread holds its
+        # own frames). `-threads` is per-file: once before each `-i` (decoders) and once
+        # before the output path, which is always the last element of every command here.
+        threads = str(get_settings().FFMPEG_THREADS)
+        args: list[str] = []
+        for arg in cmd[1:-1]:
+            if arg == "-i":
+                args += ["-threads", threads]
+            args.append(arg)
+        cmd = [
+            cmd[0], "-nostdin", "-filter_threads", threads, "-filter_complex_threads", threads,
+            *args, "-threads", threads, cmd[-1],
+        ]
     try:
         result = subprocess.run(
             cmd,

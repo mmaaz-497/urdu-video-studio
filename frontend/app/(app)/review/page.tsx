@@ -174,7 +174,7 @@ export default function ReviewPage() {
             <div
               key={index}
               data-testid="scene-card"
-              className="space-y-3 rounded-md border border-border bg-surface p-4 shadow-raised"
+              className="surface-3d space-y-3 rounded-md border border-border bg-surface p-4 shadow-depth-2"
             >
               <span className="text-body-sm font-semibold text-muted-foreground">
                 Scene {index + 1}
@@ -221,7 +221,7 @@ export default function ReviewPage() {
       </section>
 
       {limitReached && profile && (
-        <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-body text-warning">
+        <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-body text-warning shadow-depth-1">
           You&apos;ve used all your videos for today. Come back after midnight (Asia/Karachi) —
           resets {formatResetTime(profile.usage.resetsAt)}.
         </div>
@@ -234,7 +234,8 @@ export default function ReviewPage() {
         <Button
           onClick={handleApprove}
           disabled={busy || sceneProblem || limitReached}
-          className="bg-accent-gradient text-white hover:opacity-90 sm:flex-1"
+          variant="gradient"
+          className="sm:flex-1"
         >
           {approving ? 'Creating video…' : 'Approve & Create Video'}
         </Button>

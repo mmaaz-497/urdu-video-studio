@@ -23,6 +23,14 @@ const config: Config = {
         md: 'var(--radius-md)',
         lg: 'var(--radius-lg)',
       },
+      boxShadow: {
+        'depth-1': 'var(--shadow-1)',
+        'depth-2': 'var(--shadow-2)',
+        'depth-3': 'var(--shadow-3)',
+        well: 'var(--shadow-well)',
+        cta: 'var(--shadow-cta)',
+        'cta-pressed': 'var(--shadow-cta-pressed)',
+      },
       transitionDuration: {
         '150': '150ms',
         '250': '250ms',
@@ -41,6 +49,14 @@ const config: Config = {
           from: { opacity: '0', transform: 'translateY(16px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
+        'rise-in': {
+          from: { opacity: '0', transform: 'perspective(1000px) translateY(16px) rotateX(8deg)' },
+          to: { opacity: '1', transform: 'perspective(1000px) translateY(0) rotateX(0deg)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-6px)' },
+        },
         drift: {
           '0%, 100%': { transform: 'translate3d(0,0,0) scale(1)' },
           '50%': { transform: 'translate3d(4%,-3%,0) scale(1.08)' },
@@ -50,6 +66,8 @@ const config: Config = {
         'accordion-down': 'accordion-down 250ms ease-out',
         'accordion-up': 'accordion-up 250ms ease-in',
         'fade-up': 'fade-up 400ms ease-out both',
+        'rise-in': 'rise-in 400ms ease-out both',
+        float: 'float 6s ease-in-out infinite',
         drift: 'drift 18s ease-in-out infinite',
       },
       colors: {

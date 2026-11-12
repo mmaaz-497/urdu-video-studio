@@ -24,7 +24,7 @@ export function UsageBadge({ className }: UsageBadgeProps) {
     <span
       role="status"
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-body-sm font-medium tabular-nums',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-body-sm font-medium tabular-nums shadow-depth-1',
         reached
           ? 'border-warning/40 bg-warning/10 text-warning'
           : 'border-border bg-surface text-muted-foreground',

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-/** Fades children up when scrolled into view. Content is fully visible on the
+/** Fades children up (with a slight forward tilt, so they rise into place)
+ * when scrolled into view. Content is fully visible on the
  * server / without JS / with reduced motion; the hidden state is only applied
  * after mount for elements that start below the fold. */
 export function Reveal({
@@ -44,7 +45,8 @@ export function Reveal({
       style={{ transitionDelay: state === 'shown' ? `${delay}ms` : undefined }}
       className={cn(
         'transition-all duration-400 ease-out',
-        state === 'hidden' && 'translate-y-5 opacity-0',
+        state === 'hidden' &&
+          'opacity-0 [transform:perspective(1000px)_translateY(20px)_rotateX(6deg)]',
         className
       )}
     >

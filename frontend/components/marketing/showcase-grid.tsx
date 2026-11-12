@@ -4,6 +4,7 @@ import { Play } from 'lucide-react'
 import { useRef } from 'react'
 
 import { Reveal } from '@/components/marketing/reveal'
+import { Tilt } from '@/components/ui/tilt'
 
 const SAMPLES = [
   {
@@ -48,7 +49,7 @@ function ShowcaseCard({ sample }: { sample: (typeof SAMPLES)[number] }) {
       onFocus={start}
       onBlur={stop}
       tabIndex={0}
-      className="group flex h-full flex-col overflow-hidden rounded-md border border-border bg-surface shadow-raised outline-none transition-colors duration-250 hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-ring"
+      className="surface-3d group flex h-full flex-col overflow-hidden rounded-md border border-border bg-surface shadow-depth-2 outline-none transition-[box-shadow,border-color] duration-250 hover:border-primary/60 hover:shadow-depth-3 focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="relative aspect-video bg-black">
         <video
@@ -63,7 +64,7 @@ function ShowcaseCard({ sample }: { sample: (typeof SAMPLES)[number] }) {
           className="h-full w-full object-cover"
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20 opacity-100 transition-opacity duration-250 group-hover:opacity-0 group-focus-visible:opacity-0 motion-reduce:transition-none">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-black/40 text-white backdrop-blur">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-black/40 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_8px_20px_-6px_rgb(0_0_0/0.6)] backdrop-blur">
             <Play className="h-5 w-5" />
           </span>
         </span>
@@ -93,7 +94,9 @@ export function ShowcaseGrid() {
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {SAMPLES.map((sample, i) => (
           <Reveal key={sample.id} delay={i * 100}>
-            <ShowcaseCard sample={sample} />
+            <Tilt max={8} glare className="h-full rounded-md">
+              <ShowcaseCard sample={sample} />
+            </Tilt>
           </Reveal>
         ))}
       </div>

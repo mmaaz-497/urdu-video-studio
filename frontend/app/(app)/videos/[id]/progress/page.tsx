@@ -46,7 +46,7 @@ export default function VideoProgressPage({ params }: { params: Promise<{ id: st
     return (
       <div className="mx-auto max-w-xl space-y-4 text-center">
         <p className="text-body text-muted-foreground">We couldn&apos;t find this video.</p>
-        <Button asChild className="bg-accent-gradient text-white hover:opacity-90">
+        <Button asChild variant="gradient">
           <Link href="/create">Back to Create</Link>
         </Button>
       </div>
@@ -69,17 +69,17 @@ export default function VideoProgressPage({ params }: { params: Promise<{ id: st
       </div>
 
       {job.status === 'failed' ? (
-        <div className="flex flex-col items-center gap-4 rounded-md border border-destructive/30 bg-destructive/5 p-8 text-center">
+        <div className="flex flex-col items-center gap-4 rounded-md border border-destructive/30 bg-destructive/5 p-8 text-center shadow-depth-1">
           <AlertTriangle className="h-8 w-8 text-destructive" />
           <p className="text-body text-foreground">
             {job.failureReason ?? 'This video could not be created. Please try again.'}
           </p>
-          <Button asChild className="bg-accent-gradient text-white hover:opacity-90">
+          <Button asChild variant="gradient">
             <Link href="/create">Start a new video</Link>
           </Button>
         </div>
       ) : (
-        <div className="rounded-md border border-border bg-surface p-6 shadow-raised">
+        <div className="surface-3d rounded-md border border-border bg-surface p-6 shadow-depth-2">
           <ProgressStepper
             status={job.status}
             currentScene={job.progressCurrentScene}
@@ -93,8 +93,8 @@ export default function VideoProgressPage({ params }: { params: Promise<{ id: st
           <div
             className={
               job.aspectRatio === '9:16'
-                ? 'mx-auto aspect-[9/16] max-w-xs overflow-hidden rounded-lg border border-border bg-black shadow-raised'
-                : 'mx-auto aspect-video max-w-xl overflow-hidden rounded-lg border border-border bg-black shadow-raised'
+                ? 'mx-auto aspect-[9/16] max-w-xs overflow-hidden rounded-lg border border-border bg-black shadow-depth-3'
+                : 'mx-auto aspect-video max-w-xl overflow-hidden rounded-lg border border-border bg-black shadow-depth-3'
             }
           >
             <video
@@ -105,10 +105,7 @@ export default function VideoProgressPage({ params }: { params: Promise<{ id: st
             />
           </div>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <DownloadButton
-              videoId={job.id}
-              className="bg-accent-gradient text-white hover:opacity-90"
-            >
+            <DownloadButton videoId={job.id} variant="gradient">
               Download
             </DownloadButton>
             <Button variant="outline" asChild>

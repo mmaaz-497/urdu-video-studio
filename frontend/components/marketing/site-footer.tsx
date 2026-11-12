@@ -8,7 +8,7 @@ export function SiteFooter() {
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
             <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-gradient">
+              <span className="bg-accent-gradient flex h-8 w-8 items-center justify-center rounded-md shadow-cta">
                 <Clapperboard className="h-4 w-4 text-white" />
               </span>
               <span className="text-h3 font-semibold">Urdu Video Studio</span>

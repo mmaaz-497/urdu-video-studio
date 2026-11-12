@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
 
   if (submittedEmail) {
     return (
-      <Card className="w-full max-w-md border-border bg-surface shadow-raised">
+      <Card className="w-full max-w-md animate-rise-in shadow-depth-3">
         <CardHeader className="space-y-1">
           <CardTitle className="text-h2">Check your email</CardTitle>
           <CardDescription>
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <Card className="w-full max-w-md border-border bg-surface shadow-raised">
+    <Card className="w-full max-w-md animate-rise-in shadow-depth-3">
       <CardHeader className="space-y-1">
         <CardTitle className="text-h2">Forgot your password?</CardTitle>
         <CardDescription>
@@ -88,11 +88,7 @@ export default function ForgotPasswordPage() {
                 </FormItem>
               )}
             />
-            <Button
-              type="submit"
-              className="w-full bg-accent-gradient text-white hover:opacity-90"
-              disabled={submitting}
-            >
+            <Button type="submit" variant="gradient" className="w-full" disabled={submitting}>
               {submitting ? 'Sending…' : 'Send reset link'}
             </Button>
           </form>

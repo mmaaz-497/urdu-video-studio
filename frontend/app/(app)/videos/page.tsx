@@ -70,8 +70,10 @@ export default function MyVideosPage() {
 
       {!isLoading && !isError && videos.length === 0 && (
         <div className="flex min-h-[30vh] flex-col items-center justify-center gap-4 text-center">
-          <p className="text-body text-muted-foreground">You haven&apos;t created any videos yet.</p>
-          <Button asChild className="bg-accent-gradient text-white hover:opacity-90">
+          <p className="text-body text-muted-foreground">
+            You haven&apos;t created any videos yet.
+          </p>
+          <Button asChild variant="gradient">
             <Link href="/create">Create your first video</Link>
           </Button>
         </div>

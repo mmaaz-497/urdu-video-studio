@@ -1,5 +1,6 @@
 'use client'
 
+import { Check } from 'lucide-react'
 import type { KeyboardEvent, ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -51,17 +52,36 @@ export function OptionCard({
       onClick={disabled ? undefined : onSelect}
       onKeyDown={handleKeyDown}
       className={cn(
-        'relative flex min-w-[8.5rem] flex-1 shrink-0 snap-start cursor-pointer select-none flex-col items-center gap-2 rounded-md border border-border bg-surface p-4 text-center transition-all duration-150',
-        'hover:border-primary/50 hover:bg-surface-raised',
+        'relative flex min-w-[8.5rem] flex-1 shrink-0 cursor-pointer select-none snap-start flex-col items-center gap-2 rounded-md border border-border bg-surface p-4 text-center shadow-depth-1 transition-all duration-150',
+        'hover:-translate-y-1 hover:border-primary/50 hover:bg-surface-raised active:translate-y-0.5 motion-reduce:transform-none',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
         disabled && 'pointer-events-none cursor-not-allowed opacity-50',
-        selected && 'border-primary bg-surface-raised shadow-raised ring-1 ring-primary/40',
+        selected &&
+          'surface-3d -translate-y-0.5 border-primary bg-surface-raised shadow-depth-2 ring-1 ring-primary/40',
         className
       )}
     >
+      {selected && (
+        <>
+          <span aria-hidden className="hairline-gradient absolute inset-x-3 top-0 h-px" />
+          <span
+            aria-hidden
+            className="bg-accent-gradient absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-full shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]"
+          >
+            <Check className="h-3 w-3 text-white" strokeWidth={3} />
+          </span>
+        </>
+      )}
       {action && <div className="absolute right-2 top-2">{action}</div>}
       {icon && (
-        <span className="flex h-9 items-center justify-center text-foreground">{icon}</span>
+        <span
+          className={cn(
+            'flex h-9 items-center justify-center text-muted-foreground transition-colors duration-150',
+            selected && 'text-primary'
+          )}
+        >
+          {icon}
+        </span>
       )}
       {children}
       <span className="text-body font-medium leading-tight">{label}</span>

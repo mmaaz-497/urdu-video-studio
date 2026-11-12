@@ -126,6 +126,17 @@ Visit `http://localhost:3000`.
 
 ## 6. Running the critical-path tests
 
+Tests truncate tables, so they use a **separate** database named `*_test` via
+`TEST_DATABASE_URL` and abort if it is missing or misnamed (never `DATABASE_URL`). They also
+force `VIDEO_PROVIDER=mock` / `STORAGE_PROVIDER=local`. One-time setup:
+
+```bash
+docker exec urdu-video-studio-dev-postgres-1 psql -U urdu_video_studio -d postgres \
+  -c "CREATE DATABASE urdu_video_studio_test"
+cd backend && source .venv/bin/activate
+DATABASE_URL=$TEST_DATABASE_URL alembic upgrade head   # export TEST_DATABASE_URL first (see .env.example)
+```
+
 ```bash
 cd backend && source .venv/bin/activate
 pytest tests/test_auth.py tests/test_video_job_state_machine.py tests/test_llm_output_parsing.py

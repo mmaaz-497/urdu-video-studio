@@ -77,7 +77,7 @@ export function VideoCard({ job, onDelete, onRetry, deleting, retrying, classNam
   return (
     <div
       className={cn(
-        'group flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-raised transition-colors',
+        'surface-3d lift group flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-depth-2',
         className
       )}
     >
@@ -86,7 +86,7 @@ export function VideoCard({ job, onDelete, onRetry, deleting, retrying, classNam
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={cn(
-          'relative block bg-black',
+          'relative block overflow-hidden bg-black',
           job.aspectRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'
         )}
       >
@@ -99,11 +99,15 @@ export function VideoCard({ job, onDelete, onRetry, deleting, retrying, classNam
             loop
             playsInline
             preload="none"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-400 ease-out group-hover:scale-[1.03]"
           />
         ) : job.thumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={job.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <img
+            src={job.thumbnailUrl}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-400 ease-out group-hover:scale-[1.03]"
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             {isProcessing ? (

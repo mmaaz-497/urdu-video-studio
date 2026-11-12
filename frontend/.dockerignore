@@ -1,0 +1,15 @@
+# .env.local MUST stay out: Next reads it during `next build` and would bake dev values
+# (e.g. BACKEND_ORIGIN=127.0.0.1) into the production image.
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+test-results/
+playwright-report/
+e2e/
+Dockerfile
+.dockerignore

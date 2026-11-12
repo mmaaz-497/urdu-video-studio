@@ -41,3 +41,6 @@ Thumbs.db
 # Playwright
 /frontend/test-results/
 /frontend/playwright-report/
+
+# Deploy target for infra/deploy.sh (host/port only, but keep it local)
+infra/deploy.env

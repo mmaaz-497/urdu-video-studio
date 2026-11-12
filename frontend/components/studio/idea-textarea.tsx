@@ -36,9 +36,12 @@ export function IdeaTextarea({ value, onChange, disabled, id = 'idea' }: IdeaTex
         rows={5}
         aria-invalid={isInvalid}
         placeholder="اپنا آئیڈیا یہاں لکھیں — جیسے: Photosynthesis is how plants make their own food from sunlight"
-        className={cn('resize-none text-body', isInvalid && 'border-destructive focus-visible:ring-destructive')}
+        className={cn(
+          'resize-none text-body',
+          isInvalid && 'border-destructive focus-visible:ring-destructive'
+        )}
       />
-      <div className="flex items-center justify-between text-body-sm">
+      <div className="flex items-center justify-between gap-3 text-body-sm">
         <span className={cn('text-muted-foreground', isInvalid && 'text-destructive')}>
           {isTooShort
             ? `Write at least ${IDEA_MIN_LENGTH} characters`
@@ -46,9 +49,18 @@ export function IdeaTextarea({ value, onChange, disabled, id = 'idea' }: IdeaTex
               ? 'Too long — please shorten your idea'
               : 'Roman Urdu, Urdu, or English — spelling mistakes are fine'}
         </span>
-        <span className={cn('tabular-nums text-muted-foreground', isTooLong && 'text-destructive')}>
+        <span className={cn('tabular-nums text-muted-foreground', isInvalid && 'text-destructive')}>
           {value.length}/{IDEA_MAX_LENGTH}
         </span>
+      </div>
+      <div aria-hidden className="h-1.5 overflow-hidden rounded-full bg-background shadow-well">
+        <div
+          className={cn(
+            'h-full rounded-full transition-[width] duration-250 ease-out',
+            isInvalid ? 'bg-destructive' : 'bg-accent-gradient'
+          )}
+          style={{ width: `${Math.min(100, (value.length / IDEA_MAX_LENGTH) * 100)}%` }}
+        />
       </div>
     </div>
   )

@@ -17,7 +17,7 @@ def issue_csrf_cookie(response: Response) -> str:
         value=token,
         max_age=settings.SESSION_TTL_SECONDS,
         httponly=False,
-        secure=True,
+        secure=settings.COOKIE_SECURE,
         samesite="lax",
         path="/",
     )

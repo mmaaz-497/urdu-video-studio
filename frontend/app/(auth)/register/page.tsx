@@ -47,7 +47,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <Card className="w-full max-w-md border-border bg-surface shadow-raised">
+    <Card className="w-full max-w-md animate-rise-in shadow-depth-3">
       <CardHeader className="space-y-1">
         <CardTitle className="text-h2">Create your account</CardTitle>
         <CardDescription>Turn an idea into a short Urdu video in minutes.</CardDescription>
@@ -81,11 +81,7 @@ export default function RegisterPage() {
                 </FormItem>
               )}
             />
-            <Button
-              type="submit"
-              className="w-full bg-accent-gradient text-white hover:opacity-90"
-              disabled={submitting}
-            >
+            <Button type="submit" variant="gradient" className="w-full" disabled={submitting}>
               {submitting ? 'Creating account…' : 'Sign up'}
             </Button>
           </form>

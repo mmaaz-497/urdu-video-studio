@@ -9,7 +9,7 @@ from app.core.errors import AppError
 from app.models.video_job import VideoJob
 from app.schemas.scripts import Scene
 from app.schemas.videos import CreateVideoJobRequest
-from app.services import llm_service, usage_service
+from app.services import usage_service
 
 _TERMINAL_STATUSES = ("ready", "failed")
 _DEFAULT_PAGE_SIZE = 20
@@ -29,6 +29,10 @@ def create_job(
     ).scalar_one_or_none()
     if existing is not None:
         return existing, False
+
+    # Imported here, not at module level: llm_service pulls in the OpenAI Agents SDK
+    # (~100 MB), and the scheduler imports this module only for mark_status().
+    from app.services import llm_service
 
     scene_count = payload.durationSeconds // 5
     if len(payload.scenes) != scene_count:

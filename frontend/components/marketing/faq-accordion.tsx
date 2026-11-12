@@ -43,7 +43,12 @@ export function FaqAccordion() {
         <h2 className="mt-2 text-h1 font-bold tracking-tight">Questions, answered</h2>
       </Reveal>
       <Reveal className="mt-8" delay={100}>
-        <Accordion type="single" collapsible defaultValue="item-0" className="border-t border-border">
+        <Accordion
+          type="single"
+          collapsible
+          defaultValue="item-0"
+          className="surface-3d rounded-md border border-border bg-surface px-5 shadow-depth-2 sm:px-6 [&>*:last-child]:border-b-0"
+        >
           {FAQS.map((faq, i) => (
             <AccordionItem key={faq.q} value={`item-${i}`}>
               <AccordionTrigger>{faq.q}</AccordionTrigger>

@@ -30,9 +30,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Urdu Video Studio API", version="1.0.0", lifespan=lifespan)
 
-# Same-origin only: the frontend proxies /api/* to this backend (T031a dev,
-# Caddy in prod), so session/CSRF cookies are first-party and no CORS
-# middleware is needed for cross-origin credentialed requests.
+# Same-origin only: /api/* reaches this backend through the Next.js rewrite (dev, and the
+# SSH-tunnel fallback in prod) or Apache's reverse proxy (prod, T094), so session/CSRF
+# cookies are first-party and no CORS middleware is needed for cross-origin credentialed
+# requests.
 
 register_exception_handlers(app)
 

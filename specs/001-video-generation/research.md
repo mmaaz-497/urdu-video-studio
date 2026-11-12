@@ -251,7 +251,7 @@ updates. Matches Principle I.
 
 **Alternatives considered**: Server-Sent Events or WebSockets would reduce
 request volume marginally but add meaningful backend complexity (long-lived
-connections behind Caddy, reconnect handling across the "leave and come back"
+connections behind the reverse proxy, reconnect handling across the "leave and come back"
 requirement in FR-014) for no user-perceptible benefit at 3s granularity.
 Rejected.
 

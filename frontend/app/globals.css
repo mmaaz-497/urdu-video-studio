@@ -56,7 +56,28 @@
     --gradient-from: #7c5cff;
     --gradient-to: #00d1c7;
 
-    --shadow-raised: 0 0 0 1px hsl(var(--border)), 0 8px 24px -8px rgb(124 92 255 / 0.25);
+    /* Depth — three elevation levels plus a recessed "well". In dark mode
+       depth reads as a lit top edge + coloured glow, not a black drop shadow. */
+    --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.1);
+    /* Side face of an extruded slab (cards) and of the gradient CTA. */
+    --edge: 244 22% 22%;
+    --cta-edge: #3f2bb8;
+    --shadow-1:
+      var(--edge-highlight), 0 0 0 1px hsl(var(--border)), 0 3px 0 hsl(var(--edge)),
+      0 10px 18px -8px rgb(124 92 255 / 0.3);
+    --shadow-2:
+      var(--edge-highlight), 0 0 0 1px hsl(var(--border)), 0 5px 0 hsl(var(--edge)),
+      0 20px 36px -10px rgb(124 92 255 / 0.4);
+    --shadow-3:
+      var(--edge-highlight), 0 0 0 1px hsl(var(--border)), 0 8px 0 hsl(var(--edge)),
+      0 40px 70px -16px rgb(124 92 255 / 0.6);
+    --shadow-well: inset 0 2px 4px rgb(0 0 0 / 0.6), inset 0 0 0 1px rgb(0 0 0 / 0.2);
+    --shadow-cta:
+      inset 0 1px 0 rgb(255 255 255 / 0.35), 0 4px 0 var(--cta-edge),
+      0 14px 26px -8px rgb(124 92 255 / 0.7);
+    --shadow-cta-pressed: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 1px 0 var(--cta-edge);
+    --surface-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0) 50%);
+    --shadow-raised: var(--shadow-2);
   }
 
   @media (min-width: 768px) {
@@ -93,7 +114,22 @@
     --gradient-from: #6a42f2;
     --gradient-to: #00a89f;
 
-    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -8px rgb(0 0 0 / 0.08);
+    --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 1);
+    --edge: 244 30% 84%;
+    --cta-edge: #4226c4;
+    --shadow-1:
+      var(--edge-highlight), 0 3px 0 hsl(var(--edge)), 0 8px 14px -6px rgb(40 30 110 / 0.18);
+    --shadow-2:
+      var(--edge-highlight), 0 5px 0 hsl(var(--edge)), 0 20px 34px -12px rgb(40 30 110 / 0.28);
+    --shadow-3:
+      var(--edge-highlight), 0 8px 0 hsl(var(--edge)), 0 40px 70px -18px rgb(74 48 190 / 0.42);
+    --shadow-well: inset 0 2px 4px rgb(16 16 40 / 0.12);
+    --shadow-cta:
+      inset 0 1px 0 rgb(255 255 255 / 0.4), 0 4px 0 var(--cta-edge),
+      0 14px 24px -8px rgb(106 66 242 / 0.6);
+    --shadow-cta-pressed: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 1px 0 var(--cta-edge);
+    --surface-sheen: linear-gradient(180deg, rgb(255 255 255 / 1), rgb(255 255 255 / 0) 60%);
+    --shadow-raised: var(--shadow-2);
   }
 
   * {
@@ -120,6 +156,92 @@
     box-shadow: var(--shadow-raised);
   }
 
+  /* "Lit slab": a faint top-down sheen so a surface reads as a physical
+     plane catching light. Pair with a shadow-depth-* level. */
+  .surface-3d {
+    background-image: var(--surface-sheen);
+  }
+
+  /* Hover lift for cards: rises toward the viewer and casts a deeper shadow. */
+  .lift {
+    transition:
+      transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 250ms ease-out,
+      border-color 250ms ease-out;
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-8px);
+      box-shadow: var(--shadow-3);
+    }
+  }
+
+  /* Pointer-tracked perspective tilt (components/ui/tilt.tsx sets --rx/--ry). */
+  .tilt {
+    transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+    transition: transform 250ms ease-out;
+    will-change: transform;
+  }
+  /* Lets children sit at their own depth (translateZ) inside a tilt. */
+  .tilt-3d {
+    transform-style: preserve-3d;
+  }
+
+  /* Shaded sphere — reads as a solid 3D object. Colour via --orb. */
+  .orb-3d {
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle at 32% 28%,
+      rgb(255 255 255 / 0.9) 0%,
+      var(--orb, var(--gradient-from)) 42%,
+      rgb(10 8 40 / 0.85) 115%
+    );
+    box-shadow:
+      inset -6px -8px 14px rgb(0 0 0 / 0.25),
+      0 18px 30px -10px rgb(124 92 255 / 0.55);
+  }
+
+  /* Grid receding to a horizon, used as a floor behind hero content. */
+  .floor-3d {
+    perspective: 900px;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, transparent, black 45%, transparent);
+  }
+  .floor-3d > span {
+    position: absolute;
+    inset: 0 -30% -40% -30%;
+    transform-origin: top center;
+    transform: rotateX(58deg);
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.22) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--primary) / 0.22) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  .tilt-glare {
+    background: radial-gradient(
+      circle at var(--gx, 50%) var(--gy, 0%),
+      rgb(255 255 255 / 0.14),
+      rgb(255 255 255 / 0) 55%
+    );
+    opacity: 0;
+    transition: opacity 250ms ease-out;
+  }
+  .tilt[data-tilting='true'] > .tilt-glare {
+    opacity: 1;
+  }
+
+  /* 1px accent line that fades out at both ends (header/footer/panel edges). */
+  .hairline-gradient {
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      var(--gradient-from) 30%,
+      var(--gradient-to) 70%,
+      transparent
+    );
+  }
+
   .bg-accent-gradient {
     background-image: linear-gradient(135deg, var(--gradient-from), var(--gradient-to));
   }
@@ -140,5 +262,9 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .lift:hover {
+    transform: none;
   }
 }

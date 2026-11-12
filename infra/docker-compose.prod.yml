@@ -1,0 +1,171 @@
+# Production stack for a shared cPanel/WHM VPS (AlmaLinux 8, rootful podman 4.9).
+# Driven ONLY through /opt/uvs/uvs (infra/uvs.sh), which pins the project name, this
+# file, the image tag and the podman socket, so no command can reach containers that
+# belong to other projects on the box (tokoshopee-postgres, fiv-cobalt, ...).
+#
+# Hard rules for this host (see README "Deploy"):
+#   * every published port binds 127.0.0.1 only (no host firewall is active)
+#   * postgres and redis publish nothing
+#   * memory is capped per service, 1232 MB in total (postgres 160 + redis 64 + backend
+#     224 + worker 512 + scheduler 144 + frontend 128) so 12 live cPanel sites keep their RAM
+#   * every name is prefixed "uvs-"
+name: uvs
+
+# Healthchecks: always CMD-SHELL. Podman 4.9's Docker-compat API re-splits exec-form
+# ["CMD", ...] arguments on spaces (python -c "import x; ..." becomes `python -c import`),
+# and podman-compose 1.0.6 mangles them too. Verified on AlmaLinux 8.10 + podman 4.9.4.
+x-logging: &logging
+  # json-file is podman's alias for k8s-file; conmon caps each container log at max-size.
+  driver: json-file
+  options:
+    max-size: "10m"
+
+x-app: &app
+  image: localhost/uvs-backend:${UVS_TAG:?UVS_TAG is not set - run compose through /opt/uvs/uvs}
+  pull_policy: never
+  restart: always
+  env_file: .env
+  environment: &app-env
+    # Built from the POSTGRES_* values in .env so the password lives in one place.
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+    REDIS_URL: redis://redis:6379/0
+  depends_on: &app-deps
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  logging: *logging
+
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: uvs-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      TZ: ${TZ:-Asia/Karachi}
+    # Sized for a 160 MB cap (measured peak ~75 MB); a few hundred students need nowhere
+    # near the defaults.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=48MB
+      - -c
+      - effective_cache_size=96MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - max_connections=40
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 160m
+    memswap_limit: 160m
+    logging: *logging
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: uvs-redis
+    restart: always
+    # Sessions + the RQ queue. noeviction: a queue must never silently lose jobs; 32 MB is
+    # orders of magnitude more than this app's sessions/jobs need (measured: ~7 MB RSS). AOF keeps logins and
+    # queued jobs across restarts.
+    command:
+      - redis-server
+      - --maxmemory
+      - 32mb
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --save
+      - ""
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 64m
+    memswap_limit: 64m
+    logging: *logging
+
+  backend:
+    <<: *app
+    container_name: uvs-backend
+    ports:
+      - "127.0.0.1:8100:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 224m
+    memswap_limit: 224m
+
+  worker:
+    <<: *app
+    container_name: uvs-worker
+    # Whole worker (and every ffmpeg/ffprobe it spawns) at low CPU priority so Apache/PHP
+    # always win; ffmpeg itself is also capped at FFMPEG_THREADS threads.
+    command: ["nice", "-n", "10", "python", "-m", "app.worker"]
+    environment:
+      <<: *app-env
+      FFMPEG_THREADS: "2"
+    # RQ finishes the current job on SIGTERM; after this the job is killed and the
+    # scheduler later marks it failed and refunds the student's daily quota.
+    stop_grace_period: 30s
+    # Measured peak 412-422 MB for a 3-scene job: ffmpeg's concat filter holds decoded
+    # frames of every clip at once. Do not lower this below ~480m or jobs get OOM-killed.
+    mem_limit: 512m
+    memswap_limit: 512m
+
+  scheduler:
+    <<: *app
+    container_name: uvs-scheduler
+    command: ["python", "-m", "app.scheduler"]
+    # Measured ~116 MB steady (it imports app.services, incl. the OpenAI Agents SDK).
+    mem_limit: 144m
+    memswap_limit: 144m
+
+  frontend:
+    image: localhost/uvs-frontend:${UVS_TAG:?}
+    pull_policy: never
+    container_name: uvs-frontend
+    restart: always
+    environment:
+      TZ: ${TZ:-Asia/Karachi}
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3100:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 128m
+    memswap_limit: 128m
+    logging: *logging
+
+volumes:
+  pgdata:
+    name: uvs-pgdata
+  redisdata:
+    name: uvs-redis
+
+networks:
+  default:
+    name: uvs-net

@@ -108,6 +108,33 @@ implementing.
 - Light mode: conventional soft shadow:
   `box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -8px rgb(0 0 0 / 0.08)`.
 
+### Depth (subtle 3D)
+
+Surfaces sit at one of three elevation levels, defined per theme as tokens in
+`frontend/app/globals.css` and exposed as Tailwind `shadow-depth-*` utilities:
+
+| Level | Token / utility | Used for |
+|---|---|---|
+| 1 — resting | `--shadow-1` / `shadow-depth-1` | Buttons, option cards, badges |
+| 2 — raised | `--shadow-2` / `shadow-depth-2` | Cards, panels, selected option card |
+| 3 — floating | `--shadow-3` / `shadow-depth-3` | Hover state, hero video, auth card, player |
+
+- Every level includes `--edge-highlight`, a 1px inset top highlight, so a
+  surface reads as lit from above. `surface-3d` adds a faint top-down sheen.
+- Inputs and textareas are recessed, not raised: `--shadow-well` / `shadow-well`.
+- Primary calls to action use the `gradient` button variant (`--shadow-cta`).
+- Each level has a solid bottom edge (`--edge`), so surfaces read as extruded
+  slabs; the `gradient` button's edge collapses on press.
+- Scene cues: `floor-3d` (perspective grid floor) and `orb-3d` (shaded sphere)
+  on the hero and auth backgrounds and the Create page's header band only.
+- `hairline-gradient`: a 1px accent line fading out at both ends, on the
+  header's bottom edge, the app footer's top edge and selected option cards.
+- App shell: authenticated pages share `SiteHeader` (pill-tab nav, active
+  route raised) and `AppFooter` (`components/layout/app-footer.tsx`).
+- Create page: numbered `Card` panels beside a sticky "Your video" panel whose
+  tilted mock frame takes the shape of the chosen aspect ratio.
+- Depth is CSS-only (shadows and transforms); no 3D/WebGL library.
+
 ## Motion
 
 - Durations: 150ms (micro — hover/focus), 250ms (standard — panel/modal
@@ -118,6 +145,16 @@ implementing.
   becomes active; the active step's icon gets a subtle pulse (`animate-pulse`,
   Tailwind built-in) rather than a custom spinner graphic, keeping it simple
   and consistent across the step list.
+- Hover lift (`lift`): cards rise 4px and move to depth 3 over 250ms. Buttons
+  and option cards press down 1px on `:active`.
+- Pointer tilt (`components/ui/tilt.tsx`): 6–10° per axis, mouse only (touch
+  devices get static depth), used on the hero video, how-it-works and showcase
+  cards, and the auth card. The hero frame also has a resting angle (up to
+  7° / -16° on desktop) with layers at different depths (`tilt-3d` +
+  `translateZ`). Dense grids (My Videos) lift but do not tilt. The video
+  player on the progress page is never transformed.
+- Under `prefers-reduced-motion`, pointer tilt, floating and hover lift are
+  disabled; static angles and extruded edges remain, since they are not motion.
 - Respect `prefers-reduced-motion`: disable the hero autoplay video's
   motion-heavy entrance and the pulse animation, falling back to instant
   state changes.

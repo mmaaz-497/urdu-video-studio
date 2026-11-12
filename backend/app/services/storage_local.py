@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from app.core.config import get_settings
 
-# Where the backend mounts the files. The frontend proxy (Next.js rewrite in dev, Caddy in
+# Where the backend mounts the files. The frontend proxy (Next.js rewrite in dev, Apache in
 # prod) strips the leading /api before forwarding, so the backend still sees /static.
 STATIC_MOUNT_PATH = "/static"
 # What the browser is given: same-origin under /api so the existing /api/* proxy rule covers it.

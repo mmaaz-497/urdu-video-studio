@@ -28,7 +28,7 @@ type ResetValues = z.infer<typeof resetSchema>
 
 function InvalidLinkCard() {
   return (
-    <Card className="w-full max-w-md border-border bg-surface shadow-raised">
+    <Card className="w-full max-w-md animate-rise-in shadow-depth-3">
       <CardHeader className="space-y-1">
         <CardTitle className="text-h2">This link can&apos;t be used</CardTitle>
         <CardDescription>
@@ -37,7 +37,7 @@ function InvalidLinkCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button asChild className="w-full bg-accent-gradient text-white hover:opacity-90">
+        <Button asChild variant="gradient" className="w-full">
           <Link href="/forgot-password">Request a new link</Link>
         </Button>
         <p className="text-center text-body-sm text-muted-foreground">
@@ -85,7 +85,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <Card className="w-full max-w-md border-border bg-surface shadow-raised">
+    <Card className="w-full max-w-md animate-rise-in shadow-depth-3">
       <CardHeader className="space-y-1">
         <CardTitle className="text-h2">Choose a new password</CardTitle>
         <CardDescription>Use at least 8 characters.</CardDescription>
@@ -119,11 +119,7 @@ function ResetPasswordForm() {
                 </FormItem>
               )}
             />
-            <Button
-              type="submit"
-              className="w-full bg-accent-gradient text-white hover:opacity-90"
-              disabled={submitting}
-            >
+            <Button type="submit" variant="gradient" className="w-full" disabled={submitting}>
               {submitting ? 'Updating…' : 'Update password'}
             </Button>
           </form>

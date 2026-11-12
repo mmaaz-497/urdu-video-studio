@@ -1,6 +1,7 @@
 import { FileCheck2, PenLine, Sparkles } from 'lucide-react'
 
 import { Reveal } from '@/components/marketing/reveal'
+import { Tilt } from '@/components/ui/tilt'
 
 const STEPS = [
   {
@@ -56,14 +57,15 @@ export function HowItWorks() {
           {STEPS.map((step, i) => (
             <li key={step.title} className="min-w-0">
               <Reveal delay={i * 100} className="h-full">
-                <div className="relative flex h-full flex-col gap-4 overflow-hidden rounded-md border border-border bg-surface p-6 shadow-raised">
+                <Tilt max={7} glare className="h-full rounded-md">
+                <div className="surface-3d lift relative flex h-full flex-col gap-4 overflow-hidden rounded-md border border-border bg-surface p-6 shadow-depth-2">
                   <span
                     aria-hidden
                     className="absolute -right-2 -top-4 text-[6rem] font-bold leading-none text-accent-gradient opacity-20"
                   >
                     {i + 1}
                   </span>
-                  <span className="flex h-10 w-10 items-center justify-center rounded-sm bg-accent-gradient">
+                  <span className="bg-accent-gradient flex h-10 w-10 items-center justify-center rounded-sm shadow-cta">
                     <step.icon className="h-5 w-5 text-white" />
                   </span>
                   <h3 className="text-h3 font-semibold">
@@ -73,6 +75,7 @@ export function HowItWorks() {
                   <p className="text-body text-muted-foreground">{step.body}</p>
                   <div className="mt-auto pt-2">{step.sample}</div>
                 </div>
+                </Tilt>
               </Reveal>
             </li>
           ))}
