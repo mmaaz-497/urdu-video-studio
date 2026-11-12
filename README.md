@@ -50,7 +50,7 @@ so that this app can't disturb them:
 - Containers run in **podman**. Don't install docker-ce: on AlmaLinux 8 it would remove
   podman and break the other projects' containers.
 - Our containers, volumes and network are all named `uvs-*`. Ports bind to `127.0.0.1`
-  only, and memory is capped at about 1.2 GB in total.
+  only, and memory is capped at 1.25 GB in total.
 - On the VPS you **only** use `/opt/uvs/uvs` to run compose commands. It can only see
   this project.
 
@@ -172,12 +172,14 @@ git commit. Commit first, then:
 ```
 
 It builds both images, uploads them, migrates the database, starts the stack and ends
-with a health check like this:
+with a health check like this. The last line confirms that every container will come
+back on its own after a reboot:
 
 ```
 API      127.0.0.1:8100/health     -> {"status":"ok"}
 API      127.0.0.1:3100/api/health -> {"status":"ok"}  (Next.js rewrite / SSH-tunnel path)
 Frontend 127.0.0.1:3100/           -> HTTP 200
+Reboot   all 6 uvs-* containers have restart policy 'always'; podman-restart.service is enabled
 ```
 
 The first upload is about 400 MB, so give it a few minutes. Later deploys upload only

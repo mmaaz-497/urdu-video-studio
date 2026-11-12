@@ -252,10 +252,15 @@ containers (`tokoshopee-postgres` on 127.0.0.1:5432, `fiv-cobalt` on 127.0.0.1:4
 - **Protecting the live sites.** Per-service memory caps with swap disabled per
   container, measured under load (two back-to-back 3-scene jobs + parallel page loads):
   postgres 160 MB, redis 64 MB (`maxmemory 32mb`, `noeviction`), backend 224 MB, worker
-  512 MB (measured peak 410–423 MB — ffmpeg's concat filter holds every clip's frames),
-  scheduler 144 MB, frontend 128 MB = **1232 MB**. ffmpeg is capped at
+  624 MB (measured peak 364–423 MB — ffmpeg's concat filter holds every clip's frames),
+  scheduler 80 MB (measured peak 60 MB while sweeping, +30%), frontend 128 MB =
+  **1280 MB (1.25 GiB)**. The scheduler stays small only because `video_job_service`
+  imports `llm_service` (OpenAI Agents SDK, ~100 MB) lazily inside `create_job`. ffmpeg is capped at
   `FFMPEG_THREADS=2` (decoders, filters, encoder) and the whole worker runs under
   `nice -n 10`. Container logs are capped at 10 MB each.
+- **Reboot safety without rebooting.** Every deploy/rollback/check verifies that all six
+  `uvs-*` containers exist and have restart policy `always` and that
+  `podman-restart.service` is enabled — the server is never rebooted just to test this.
 - **No builds on the VPS.** A Next.js build would starve the live sites of RAM. Images
   are built on the dev machine (`infra/deploy.sh`), tagged with the git short SHA and
   streamed with `docker save | gzip | ssh … podman load`; an image whose ID the VPS
@@ -278,10 +283,11 @@ containers (`tokoshopee-postgres` on 127.0.0.1:5432, `fiv-cobalt` on 127.0.0.1:4
 
 - **Worker memory scales with clip count/resolution.** ffmpeg's concat filter keeps every
   input's decoded frames in memory; 3 × 5 s 720p clips peak at ~420 MB of the worker's
-  512 MB cap. A longer max duration or higher resolution needs re-measuring, or a
+  624 MB cap. A longer max duration or higher resolution needs re-measuring, or a
   per-clip normalize + concat-demuxer pipeline.
-- **Scheduler imports the OpenAI Agents SDK** (via `video_job_service` → `llm_service`),
-  costing ~100 MB it never uses; a lazy import would let its cap drop to ~64 MB.
+- **Scheduler cap depends on a lazy import.** `video_job_service` must keep importing
+  `llm_service` inside `create_job`; a module-level import would pull the Agents SDK into
+  the scheduler (~120 MB) and get it OOM-killed at its 80 MB cap.
 
 - **`WORDS_PER_5S_MAX` (words-per-5-seconds narration limit, `backend/app/services/llm_service.py`) was calibrated against real OmniVoice output on 2026-11-05: it is now `12` (previously an uncalibrated estimate of 15, set when Phase 3 ran entirely in `VIDEO_PROVIDER=mock`).** Measured speech rate on the two preset voices: male mean 2.62 words/s (min 2.42), female mean 2.58 words/s (min 2.26). At 12 words per 5 s scene, mean speech takes ~4.6–4.7 s and even the slowest measured sample takes ~5.3 s, so narration fits without speed-up in the normal case and the 1.10× `atempo` (5.5 s) is only a rare safety net. (`scripts/calibrate_words.py` recommended 13, which would rely on `atempo` for most jobs and sit near the `SCRIPT_TOO_LONG` edge, so 12 was chosen deliberately.) The original risk text follows for context: This constant drives the `wordLimit` shown to students and the hard gate enforced on `POST /videos`. If it's wrong, every real (`VIDEO_PROVIDER=runpod`) job fails systematically: too generous and OmniVoice's real narration will routinely exceed the 10% `atempo` speedup budget, landing jobs in `SCRIPT_TOO_LONG`; too strict and scripts are needlessly short. Re-measure if the voices, the TTS model, or the sentence style change — see research.md A9.
 

@@ -6,8 +6,8 @@
 # Hard rules for this host (see README "Deploy"):
 #   * every published port binds 127.0.0.1 only (no host firewall is active)
 #   * postgres and redis publish nothing
-#   * memory is capped per service, 1232 MB in total (postgres 160 + redis 64 + backend
-#     224 + worker 512 + scheduler 144 + frontend 128) so 12 live cPanel sites keep their RAM
+#   * memory is capped per service, 1280 MB in total (postgres 160 + redis 64 + backend
+#     224 + worker 624 + scheduler 80 + frontend 128) so 12 live cPanel sites keep their RAM
 #   * every name is prefixed "uvs-"
 name: uvs
 
@@ -126,18 +126,19 @@ services:
     # RQ finishes the current job on SIGTERM; after this the job is killed and the
     # scheduler later marks it failed and refunds the student's daily quota.
     stop_grace_period: 30s
-    # Measured peak 412-422 MB for a 3-scene job: ffmpeg's concat filter holds decoded
-    # frames of every clip at once. Do not lower this below ~480m or jobs get OOM-killed.
-    mem_limit: 512m
-    memswap_limit: 512m
+    # Measured peak 412-423 MB for a 3-scene (15 s) job: ffmpeg's concat filter holds
+    # decoded frames of every clip at once. 624m = ~48% headroom; never go below ~480m.
+    mem_limit: 624m
+    memswap_limit: 624m
 
   scheduler:
     <<: *app
     container_name: uvs-scheduler
     command: ["python", "-m", "app.scheduler"]
-    # Measured ~116 MB steady (it imports app.services, incl. the OpenAI Agents SDK).
-    mem_limit: 144m
-    memswap_limit: 144m
+    # Measured peak 60 MB while sweeping stale jobs (+30% -> 80m). It must not import the
+    # OpenAI Agents SDK (see the lazy import in video_job_service.create_job).
+    mem_limit: 80m
+    memswap_limit: 80m
 
   frontend:
     image: localhost/uvs-frontend:${UVS_TAG:?}

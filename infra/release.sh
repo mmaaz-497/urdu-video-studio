@@ -31,6 +31,29 @@ wait_healthy() { # wait_healthy <seconds> <container>...
   done
 }
 
+EXPECTED_CONTAINERS=(uvs-postgres uvs-redis uvs-backend uvs-worker uvs-scheduler uvs-frontend)
+
+check_restart_policies() {
+  # podman-restart.service only restarts containers whose policy is "always" at boot. We do
+  # not reboot a server with 12 live sites to test that, so check the policy itself.
+  local bad=0 c policy names
+  names=$(podman ps -a --filter 'name=^uvs-' --format '{{.Names}}')
+  for c in "${EXPECTED_CONTAINERS[@]}"; do
+    grep -qx "$c" <<<"$names" || { echo "MISSING container $c" >&2; bad=1; }
+  done
+  for c in $names; do
+    policy=$(podman inspect --format '{{.HostConfig.RestartPolicy.Name}}' "$c")
+    if [[ "$policy" != always ]]; then
+      echo "RESTART POLICY: $c has '${policy:-none}', expected 'always' (would not come back after a reboot)" >&2
+      bad=1
+    fi
+  done
+  (( bad == 0 )) || die "restart-policy check failed"
+  echo "Reboot   all $(wc -w <<<"$names") uvs-* containers have restart policy 'always'; podman-restart.service is $(systemctl is-enabled podman-restart.service 2>/dev/null || echo unknown)"
+  [[ "$(systemctl is-enabled podman-restart.service 2>/dev/null)" == enabled ]] \
+    || die "podman-restart.service is not enabled: systemctl enable podman-restart.service"
+}
+
 check() {
   wait_healthy 180 uvs-postgres uvs-redis uvs-backend uvs-frontend
   for c in uvs-worker uvs-scheduler; do
@@ -40,6 +63,7 @@ check() {
   echo "API      127.0.0.1:8100/health     -> $(curl -fsS --max-time 5 http://127.0.0.1:8100/health)"
   echo "API      127.0.0.1:3100/api/health -> $(curl -fsS --max-time 5 http://127.0.0.1:3100/api/health)  (Next.js rewrite / SSH-tunnel path)"
   echo "Frontend 127.0.0.1:3100/           -> HTTP $(curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/)"
+  check_restart_policies
   "$UVS" ps --format 'table {{.Name}}\t{{.Image}}\t{{.Status}}'
   echo "Live release: $(<RELEASE)"
 }
